@@ -1,0 +1,144 @@
+{
+  "sync_version": 1,
+  "server_time": "2026-08-18T10:00:00Z",
+  "student": {
+    "id": "50000000-0000-4000-8000-000000000001",
+    "roll_number": "DEV24155001",
+    "institutional_email": "dev24155001@example.edu",
+    "display_name": "Aarav Mehta"
+  },
+  "academic_terms": [
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "name": "Autumn 2026",
+      "academic_year": "2026-27",
+      "term_number": 1,
+      "starts_on": "2026-08-01",
+      "ends_on": "2026-12-20",
+      "status": "ACTIVE"
+    }
+  ],
+  "sections": [
+    {
+      "id": "20000000-0000-4000-8000-000000000021",
+      "academic_term_id": "10000000-0000-4000-8000-000000000001",
+      "code": "CSE-21"
+    }
+  ],
+  "courses": [
+    {
+      "id": "30000000-0000-4000-8000-000000000001",
+      "code": "DAA",
+      "name": "Design and Analysis of Algorithms"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000002",
+      "code": "CN",
+      "name": "Computer Networks"
+    }
+  ],
+  "course_offerings": [
+    {
+      "id": "60000000-0000-4000-8000-000000000001",
+      "course_id": "30000000-0000-4000-8000-000000000001",
+      "academic_term_id": "10000000-0000-4000-8000-000000000001",
+      "section_id": "20000000-0000-4000-8000-000000000021"
+    },
+    {
+      "id": "60000000-0000-4000-8000-000000000002",
+      "course_id": "30000000-0000-4000-8000-000000000002",
+      "academic_term_id": "10000000-0000-4000-8000-000000000001",
+      "section_id": "20000000-0000-4000-8000-000000000021"
+    }
+  ],
+  "enrollments": [
+    {
+      "id": "90000000-0000-4000-8000-000000000001",
+      "student_id": "50000000-0000-4000-8000-000000000001",
+      "course_offering_id": "60000000-0000-4000-8000-000000000001"
+    },
+    {
+      "id": "90000000-0000-4000-8000-000000000002",
+      "student_id": "50000000-0000-4000-8000-000000000001",
+      "course_offering_id": "60000000-0000-4000-8000-000000000002"
+    }
+  ],
+  "faculty": [
+    {
+      "id": "40000000-0000-4000-8000-000000000001",
+      "employee_code": "DEVFAC001",
+      "institutional_email": "ananya.sen@example.edu",
+      "display_name": "Dr. Ananya Sen"
+    }
+  ],
+  "faculty_assignments": [
+    {
+      "id": "70000000-0000-4000-8000-000000000001",
+      "faculty_id": "40000000-0000-4000-8000-000000000001",
+      "course_offering_id": "60000000-0000-4000-8000-000000000001",
+      "role": "PRIMARY"
+    }
+  ],
+  "attendance_sessions": [
+    {
+      "id": "80000000-0000-4000-8000-000000000001",
+      "course_offering_id": "60000000-0000-4000-8000-000000000001",
+      "scheduled_start": "2026-08-10T04:30:00Z",
+      "scheduled_end": "2026-08-10T05:30:00Z",
+      "state": "CLOSED"
+    },
+    {
+      "id": "80000000-0000-4000-8000-000000000002",
+      "course_offering_id": "60000000-0000-4000-8000-000000000001",
+      "scheduled_start": "2026-08-12T04:30:00Z",
+      "scheduled_end": "2026-08-12T05:30:00Z",
+      "state": "CLOSED"
+    },
+    {
+      "id": "80000000-0000-4000-8000-000000000003",
+      "course_offering_id": "60000000-0000-4000-8000-000000000001",
+      "scheduled_start": "2026-08-14T04:30:00Z",
+      "scheduled_end": "2026-08-14T05:30:00Z",
+      "state": "CLOSED"
+    }
+  ],
+  "attendance_records": [
+    {
+      "id": "a0000000-0000-4000-8000-000000000001",
+      "attendance_session_id": "80000000-0000-4000-8000-000000000001",
+      "student_id": "50000000-0000-4000-8000-000000000001",
+      "status": "PRESENT",
+      "method": "DYNAMIC_QR",
+      "recorded_at": "2026-08-10T04:33:00Z"
+    },
+    {
+      "id": "a0000000-0000-4000-8000-000000000002",
+      "attendance_session_id": "80000000-0000-4000-8000-000000000002",
+      "student_id": "50000000-0000-4000-8000-000000000001",
+      "status": "PRESENT",
+      "method": "FACULTY_ATTESTATION",
+      "recorded_at": "2026-08-12T04:36:00Z"
+    },
+    {
+      "id": "a0000000-0000-4000-8000-000000000003",
+      "attendance_session_id": "80000000-0000-4000-8000-000000000003",
+      "student_id": "50000000-0000-4000-8000-000000000001",
+      "status": "ABSENT",
+      "method": null,
+      "recorded_at": "2026-08-14T04:40:00Z"
+    }
+  ],
+  "attendance_summaries": [
+    {
+      "course_id": "30000000-0000-4000-8000-000000000001",
+      "course_code": "DAA",
+      "course_name": "Design and Analysis of Algorithms",
+      "total_classes": 3,
+      "present": 2,
+      "absent": 1,
+      "percentage": 66.67
+    }
+  ],
+  "cursor": "goal02:fixture:v1"
+}
+
