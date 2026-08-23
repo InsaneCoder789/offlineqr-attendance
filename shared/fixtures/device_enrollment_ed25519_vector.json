@@ -1,0 +1,18 @@
+{
+  "algorithm": "Ed25519",
+  "seed_b64url": "KioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKio",
+  "public_key": "GX9rI-FshTLGq8g4-s1ep4m-DHaykgM0A5v6iz02jWE",
+  "key_fingerprint": "b600306cfa76723fdec395e53a9b3d9fdb78b1e2d7a23c32fcbcd2dc6d0c4092",
+  "student_id": "50000000-0000-4000-8000-000000000001",
+  "challenge_id": "11111111-1111-4111-8111-111111111111",
+  "challenge": "mPTA6nsK8vS5j1oFzkm3XUCtEgQe5iGmC1v9hZ4A7eQ",
+  "issued_at": "2026-08-18T10:00:00+00:00",
+  "canonical_payload": "DEVICE_ENROLLMENT_V1\nstudent_id:50000000-0000-4000-8000-000000000001\nchallenge_id:11111111-1111-4111-8111-111111111111\nchallenge:mPTA6nsK8vS5j1oFzkm3XUCtEgQe5iGmC1v9hZ4A7eQ\nissued_at:2026-08-18T10:00:00+00:00\npublic_key_fingerprint:b600306cfa76723fdec395e53a9b3d9fdb78b1e2d7a23c32fcbcd2dc6d0c4092",
+  "signature": "Rl1TIEtVwZeolNikCC_FZbghJZaUOajE0ky_KiLt5xlffbg5zCnKbzqyL2d7gYE42Vjbr1XpFJhs3-vC1F9sDA",
+  "negative": {
+    "altered_payload_suffix": "tampered",
+    "altered_signature": "Rl1TIEtVwZeolNikCC_FZbghJZaUOajE0ky_KiLt5xlffbg5zCnKbzqyL2d7gYE42Vjbr1XpFJhs3-vC1F9sAA",
+    "unsupported_algorithm": "RSA"
+  }
+}
+
