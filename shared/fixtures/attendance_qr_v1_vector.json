@@ -1,0 +1,29 @@
+{
+  "description": "Goal 04 deterministic ATTENDANCE_QR_V1 fixture",
+  "root_seed_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+  "session_seed_hex": "0909090909090909090909090909090909090909090909090909090909090909",
+  "canonical_session_authorization": "SESSION_AUTHORIZATION_V1\nauthorization_id:aaaaaaaa-0000-4000-8000-000000000001\nsession_id:80000000-0000-4000-8000-000000000099\ncourse_offering_id:60000000-0000-4000-8000-000000000001\nfaculty_id:40000000-0000-4000-8000-000000000001\nvalid_from:2026-08-18T09:45:00.000Z\nvalid_until:2026-08-18T11:15:00.000Z\nkey_id:session:80000000-0000-4000-8000-000000000099\nsession_public_key:_RckOFqgx1tk-3jNYC-h2ZH96_drE8WO1wLqyDXp9hg",
+  "canonical_attendance_qr": "ATTENDANCE_QR_V1\nsession_id:80000000-0000-4000-8000-000000000099\nepoch:0\nissued_at:2026-08-18T10:00:00.000Z\nexpires_at:2026-08-18T10:00:05.000Z\nchallenge:challenge-001\nkey_id:session:80000000-0000-4000-8000-000000000099",
+  "payload": {
+    "protocol_version": "ATTENDANCE_QR_V1",
+    "session_id": "80000000-0000-4000-8000-000000000099",
+    "epoch": 0,
+    "issued_at": "2026-08-18T10:00:00.000Z",
+    "expires_at": "2026-08-18T10:00:05.000Z",
+    "challenge": "challenge-001",
+    "key_id": "session:80000000-0000-4000-8000-000000000099",
+    "signature": "dGB1_5vF2aJCelaJPIbYet2-djwpsZeUm3vhkH8IxclA2HQEI75rvFGV4FlzPoG5IHChVgp70b6u1wOW-_JcBg",
+    "session_authorization": {
+      "authorization_id": "aaaaaaaa-0000-4000-8000-000000000001",
+      "protocol_version": "SESSION_AUTHORIZATION_V1",
+      "session_id": "80000000-0000-4000-8000-000000000099",
+      "course_offering_id": "60000000-0000-4000-8000-000000000001",
+      "faculty_id": "40000000-0000-4000-8000-000000000001",
+      "valid_from": "2026-08-18T09:45:00.000Z",
+      "valid_until": "2026-08-18T11:15:00.000Z",
+      "key_id": "session:80000000-0000-4000-8000-000000000099",
+      "session_public_key": "_RckOFqgx1tk-3jNYC-h2ZH96_drE8WO1wLqyDXp9hg",
+      "server_signature": "fvBspvHsyht4FIhGjRihCR7VrnY_M2vgycl8TmGhcJDcNlUNS05sjSaTfHjAEnXhFuKzx7qXUKAmSxvrnvRNBQ"
+    }
+  }
+}
