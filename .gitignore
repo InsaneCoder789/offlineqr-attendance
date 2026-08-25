@@ -19,7 +19,7 @@ node_modules/
 
 # Keep the public project README only.
 *.md
-!README.md
+!/README.md
 
 client/.dart_tool/
 client/build/
