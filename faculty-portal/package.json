@@ -1,0 +1,26 @@
+{
+  "name": "kiit-attendance-faculty-portal",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1 --port 5173",
+    "build": "next build",
+    "start": "next start --hostname 127.0.0.1 --port 5173",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.9.7",
+    "next": "^15.5.3",
+    "qrcode": "^1.5.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.11"
+  }
+}
