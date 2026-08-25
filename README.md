@@ -1,8 +1,10 @@
 <div align="center">
 
-# KIIT Attendance System
+![OfflineQR Attendance banner](assets/offlineqr-banner.svg)
 
-### Offline-first secure dynamic QR attendance platform for classrooms
+# OfflineQR Attendance
+
+### Dynamic QR based Offline Attendance System for Institutions
 
 ![Platform](https://img.shields.io/badge/platform-Flutter%20%7C%20Next.js%20%7C%20FastAPI-159A53?style=for-the-badge)
 ![Security](https://img.shields.io/badge/security-Device%20Bound%20%7C%20Signed%20Proofs-0B6F3A?style=for-the-badge)
@@ -12,7 +14,7 @@
 
 ## Project Summary
 
-KIIT Attendance System is a minor project prototype for a secure, offline-first classroom attendance platform. The system is built around a simple requirement: attendance must continue even when the classroom internet connection fails.
+OfflineQR Attendance is a minor project prototype for a secure, offline-first classroom attendance platform. The system is built around a simple requirement: attendance must continue even when the classroom internet connection fails.
 
 The platform combines a Flutter student app, a Next.js faculty portal, and a FastAPI backend. Attendance is captured locally first, cryptographically signed by the registered student device, synchronized when the network returns, and re-verified by the backend before becoming authoritative.
 
