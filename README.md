@@ -1,6 +1,6 @@
 <div align="center">
 
-![OfflineQR Attendance banner](assets/offlineqr-banner.svg)
+![OfflineQR Attendance banner](assets/offlineqr-showcase-banner.svg)
 
 # OfflineQR Attendance
 

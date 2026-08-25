@@ -1,0 +1,200 @@
+<svg width="2400" height="1320" viewBox="0 0 2400 1320" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">OfflineQR Attendance showcase banner</title>
+  <desc id="desc">A professional GitHub showcase banner for OfflineQR Attendance, a dynamic QR based offline attendance system for institutions.</desc>
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="2400" y2="1320" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset=".55" stop-color="#FAFCFB"/>
+      <stop offset="1" stop-color="#EFF8F3"/>
+    </linearGradient>
+    <linearGradient id="phoneScreen" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F5FAF7"/>
+    </linearGradient>
+    <linearGradient id="primary" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#22A963"/>
+      <stop offset="1" stop-color="#0B6F3A"/>
+    </linearGradient>
+    <linearGradient id="dark" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#121D18"/>
+      <stop offset="1" stop-color="#24312B"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#143D29" flood-opacity=".12"/>
+    </filter>
+    <filter id="phoneShadow" x="-25%" y="-25%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="34" stdDeviation="28" flood-color="#101816" flood-opacity=".24"/>
+    </filter>
+    <pattern id="qrPattern" width="120" height="120" patternUnits="userSpaceOnUse">
+      <rect width="120" height="120" fill="#fff"/>
+      <rect x="8" y="8" width="30" height="30" rx="3" fill="#101816"/>
+      <rect x="14" y="14" width="18" height="18" rx="2" fill="#fff"/>
+      <rect x="82" y="8" width="30" height="30" rx="3" fill="#101816"/>
+      <rect x="88" y="14" width="18" height="18" rx="2" fill="#fff"/>
+      <rect x="8" y="82" width="30" height="30" rx="3" fill="#101816"/>
+      <rect x="14" y="88" width="18" height="18" rx="2" fill="#fff"/>
+      <rect x="50" y="10" width="10" height="10" fill="#101816"/>
+      <rect x="66" y="10" width="10" height="26" fill="#101816"/>
+      <rect x="44" y="28" width="28" height="9" fill="#101816"/>
+      <rect x="48" y="48" width="10" height="26" fill="#101816"/>
+      <rect x="66" y="54" width="26" height="9" fill="#101816"/>
+      <rect x="102" y="48" width="9" height="30" fill="#101816"/>
+      <rect x="44" y="82" width="20" height="9" fill="#101816"/>
+      <rect x="66" y="78" width="10" height="34" fill="#101816"/>
+      <rect x="84" y="88" width="28" height="9" fill="#101816"/>
+      <rect x="84" y="106" width="10" height="8" fill="#101816"/>
+      <rect x="102" y="106" width="10" height="8" fill="#101816"/>
+      <rect x="46" y="102" width="14" height="12" fill="#101816"/>
+    </pattern>
+  </defs>
+
+  <rect width="2400" height="1320" rx="64" fill="#F3F6F4"/>
+  <rect x="10" y="10" width="2380" height="1300" rx="58" fill="url(#page)" stroke="#E9EFEC" stroke-width="6"/>
+
+  <g opacity=".72">
+    <path d="M1248 238C1430 92 1706 82 1910 214C2108 342 2196 580 2126 796C2046 1044 1772 1148 1546 1048C1328 950 1226 740 1274 520C1294 432 1336 356 1396 294" stroke="#E6F2EC" stroke-width="26" stroke-linecap="round"/>
+    <path d="M1322 322C1478 204 1706 202 1876 316C2028 418 2090 596 2036 754C1974 936 1772 1026 1590 948C1412 872 1336 704 1374 536C1390 466 1424 406 1472 356" stroke="#F2F7F4" stroke-width="96" stroke-linecap="round"/>
+  </g>
+
+  <g transform="translate(92 86)">
+    <g>
+      <rect x="0" y="0" width="152" height="152" rx="32" fill="url(#primary)"/>
+      <rect x="34" y="34" width="84" height="84" rx="14" fill="#fff"/>
+      <rect x="48" y="48" width="22" height="22" fill="#0B6F3A"/>
+      <rect x="82" y="48" width="22" height="22" fill="#0B6F3A"/>
+      <rect x="48" y="82" width="22" height="22" fill="#0B6F3A"/>
+      <rect x="82" y="82" width="10" height="10" fill="#0B6F3A"/>
+      <rect x="94" y="94" width="10" height="10" fill="#0B6F3A"/>
+    </g>
+    <text x="220" y="78" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="92" font-weight="900" fill="#07100C">OfflineQR</text>
+    <text x="690" y="78" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="92" font-weight="900" fill="#159A53">Attendance</text>
+    <text x="222" y="138" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="36" font-weight="580" fill="#202B26">Dynamic QR based Offline Attendance System for Institutions</text>
+  </g>
+
+  <rect x="96" y="322" width="92" height="5" rx="2.5" fill="#159A53"/>
+  <text x="96" y="424" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="34" font-weight="500" fill="#1D2823">
+    <tspan x="96" dy="0">OfflineQR lets institutions record classroom attendance</tspan>
+    <tspan x="96" dy="52">securely, even when the internet is unavailable.</tspan>
+  </text>
+  <text x="96" y="574" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="33" font-weight="500" fill="#1D2823">
+    <tspan x="96" dy="0">It uses </tspan><tspan fill="#159A53" font-weight="850">rotating QR challenges</tspan><tspan>, </tspan><tspan fill="#159A53" font-weight="850">one-device identity</tspan><tspan>,</tspan>
+    <tspan x="96" dy="52">and </tspan><tspan fill="#159A53" font-weight="850">signed offline proofs</tspan><tspan> that sync when connectivity returns.</tspan>
+  </text>
+  <text x="96" y="742" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="33" font-weight="500" fill="#1D2823">
+    <tspan x="96" dy="0">Faculty get a live portal with a dynamic QR session,</tspan>
+    <tspan x="96" dy="52">roster polling, records, and manual attestation fallback.</tspan>
+  </text>
+
+  <g transform="translate(86 890)" filter="url(#cardShadow)" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif">
+    <g>
+      <rect width="176" height="184" rx="20" fill="#fff" stroke="#E4ECE8"/>
+      <path d="M88 42L116 58V92C116 118 99 134 88 140C77 134 60 118 60 92V58L88 42Z" fill="#159A53"/>
+      <path d="M76 88L85 97L102 76" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="88" y="128" text-anchor="middle" font-size="18" font-weight="850" fill="#101816">Device Bound</text>
+      <text x="88" y="156" text-anchor="middle" font-size="15" font-weight="520" fill="#4B5A54">one student</text>
+    </g>
+    <g transform="translate(196 0)">
+      <rect width="176" height="184" rx="20" fill="#fff" stroke="#E4ECE8"/>
+      <rect x="56" y="42" width="64" height="64" rx="12" fill="#EAF7EE"/>
+      <rect x="72" y="58" width="32" height="32" fill="url(#qrPattern)"/>
+      <text x="88" y="128" text-anchor="middle" font-size="18" font-weight="850" fill="#101816">5 sec QR</text>
+      <text x="88" y="156" text-anchor="middle" font-size="15" font-weight="520" fill="#4B5A54">live challenge</text>
+    </g>
+    <g transform="translate(392 0)">
+      <rect width="176" height="184" rx="20" fill="#fff" stroke="#E4ECE8"/>
+      <circle cx="88" cy="72" r="32" fill="#EAF7EE"/>
+      <path d="M88 50V74L104 84" stroke="#159A53" stroke-width="8" stroke-linecap="round"/>
+      <text x="88" y="128" text-anchor="middle" font-size="18" font-weight="850" fill="#101816">60 sec Claim</text>
+      <text x="88" y="156" text-anchor="middle" font-size="15" font-weight="520" fill="#4B5A54">scan window</text>
+    </g>
+    <g transform="translate(588 0)">
+      <rect width="176" height="184" rx="20" fill="#fff" stroke="#E4ECE8"/>
+      <rect x="50" y="42" width="76" height="76" rx="18" fill="#EAF7EE"/>
+      <path d="M70 82L84 96L108 66" stroke="#159A53" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="88" y="128" text-anchor="middle" font-size="18" font-weight="850" fill="#101816">Offline Sync</text>
+      <text x="88" y="156" text-anchor="middle" font-size="15" font-weight="520" fill="#4B5A54">eventual verify</text>
+    </g>
+  </g>
+
+  <g transform="translate(1386 70) rotate(6)" filter="url(#phoneShadow)">
+    <rect width="480" height="900" rx="78" fill="#191D1B"/>
+    <rect x="18" y="18" width="444" height="864" rx="62" fill="url(#phoneScreen)"/>
+    <circle cx="240" cy="44" r="16" fill="#151A18"/>
+    <text x="56" y="112" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="21" font-weight="800" fill="#101816">9:30</text>
+    <text x="56" y="198" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="44" font-weight="900" fill="#101816">Hello Rohan</text>
+    <text x="56" y="242" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="22" font-weight="720" fill="#159A53">Your attendance device is verified</text>
+    <rect x="52" y="286" width="376" height="150" rx="28" fill="url(#primary)"/>
+    <text x="96" y="348" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="20" font-weight="800" fill="#DFF8E9" letter-spacing="1.4">SESSION ACTIVE</text>
+    <text x="96" y="392" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="32" font-weight="900" fill="#fff">Computer Networks</text>
+    <rect x="56" y="480" width="368" height="168" rx="28" fill="#fff" stroke="#E4ECE8"/>
+    <rect x="88" y="512" width="104" height="104" rx="14" fill="url(#qrPattern)"/>
+    <text x="218" y="546" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="24" font-weight="900" fill="#101816">Scan Attendance QR</text>
+    <text x="218" y="584" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="19" font-weight="650" fill="#4B5A54">Signed proof stored</text>
+    <text x="218" y="618" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="19" font-weight="850" fill="#159A53">Sync ready</text>
+    <rect x="56" y="682" width="368" height="86" rx="22" fill="#fff" stroke="#E4ECE8"/>
+    <circle cx="96" cy="725" r="20" fill="#EAF7EE"/>
+    <path d="M86 724L94 732L108 716" stroke="#159A53" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="132" y="718" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="20" font-weight="850" fill="#101816">Attendance Logger</text>
+    <text x="132" y="746" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="16" font-weight="600" fill="#6A7872">Server accepted</text>
+    <rect x="54" y="812" width="372" height="42" rx="21" fill="#F3F8F5"/>
+    <circle cx="104" cy="833" r="9" fill="#159A53"/>
+    <circle cx="178" cy="833" r="9" fill="#A8B8B0"/>
+    <circle cx="252" cy="833" r="9" fill="#A8B8B0"/>
+    <circle cx="326" cy="833" r="9" fill="#A8B8B0"/>
+  </g>
+
+  <g filter="url(#cardShadow)" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif">
+    <g transform="translate(1168 240) rotate(4)">
+      <rect width="304" height="154" rx="20" fill="#fff" stroke="#E6EEE9"/>
+      <circle cx="58" cy="58" r="30" fill="#EAF7EE"/>
+      <path d="M45 58L56 70L74 48" stroke="#159A53" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="106" y="54" font-size="21" font-weight="900" fill="#101816">Proof Captured</text>
+      <text x="106" y="88" font-size="18" font-weight="560" fill="#4B5A54">Stored locally first</text>
+      <text x="106" y="120" font-size="17" font-weight="850" fill="#159A53">No internet required</text>
+    </g>
+    <g transform="translate(1972 278) rotate(-3)">
+      <rect width="304" height="154" rx="20" fill="#fff" stroke="#E6EEE9"/>
+      <circle cx="58" cy="58" r="30" fill="#F1F8F4"/>
+      <rect x="43" y="43" width="30" height="30" rx="6" fill="url(#qrPattern)"/>
+      <text x="106" y="54" font-size="21" font-weight="900" fill="#101816">Dynamic QR</text>
+      <text x="106" y="88" font-size="18" font-weight="560" fill="#4B5A54">Refreshes every</text>
+      <text x="106" y="120" font-size="17" font-weight="850" fill="#159A53">5 seconds</text>
+    </g>
+    <g transform="translate(1162 590) rotate(-5)">
+      <rect width="312" height="154" rx="20" fill="#fff" stroke="#E6EEE9"/>
+      <circle cx="58" cy="58" r="30" fill="#EAF7EE"/>
+      <path d="M58 34V82M38 58H78" stroke="#159A53" stroke-width="8" stroke-linecap="round"/>
+      <text x="106" y="54" font-size="21" font-weight="900" fill="#101816">Faculty Attestation</text>
+      <text x="106" y="88" font-size="18" font-weight="560" fill="#4B5A54">Controlled fallback</text>
+      <text x="106" y="120" font-size="17" font-weight="850" fill="#159A53">Auditable action</text>
+    </g>
+    <g transform="translate(1952 710) rotate(3)">
+      <rect width="322" height="154" rx="20" fill="#fff" stroke="#E6EEE9"/>
+      <circle cx="58" cy="58" r="30" fill="#EAF7EE"/>
+      <path d="M58 38C74 50 82 64 82 80C82 98 71 112 58 120C45 112 34 98 34 80C34 64 42 50 58 38Z" fill="#159A53"/>
+      <text x="106" y="54" font-size="21" font-weight="900" fill="#101816">One Device</text>
+      <text x="106" y="88" font-size="18" font-weight="560" fill="#4B5A54">One student identity</text>
+      <text x="106" y="120" font-size="17" font-weight="850" fill="#159A53">Signed attendance</text>
+    </g>
+  </g>
+
+  <g transform="translate(94 1158)">
+    <rect width="2212" height="104" rx="28" fill="#fff" stroke="#E7EEEA"/>
+    <circle cx="48" cy="52" r="28" fill="#101816"/>
+    <path d="M44 68C28 64 22 52 28 38C34 24 52 20 64 31C75 42 72 61 58 68V58C66 52 66 40 58 34C50 28 38 32 34 42C30 54 36 62 44 64V68Z" fill="#fff"/>
+    <text x="90" y="60" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="28" font-weight="720" fill="#101816">InsaneCoder789 / </text>
+    <text x="348" y="60" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="28" font-weight="900" fill="#159A53">offlineqr-attendance</text>
+    <rect x="690" y="20" width="1.5" height="64" fill="#DDE6E1"/>
+    <text x="740" y="46" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="20" font-weight="850" fill="#6B7872">PRIVATE MINOR PROJECT</text>
+    <text x="740" y="74" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="17" font-weight="560" fill="#6B7872">Flutter · Next.js · FastAPI · Ed25519</text>
+    <rect x="1110" y="18" width="318" height="68" rx="20" fill="#EAF7EE"/>
+    <text x="1160" y="46" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="18" font-weight="850" fill="#0B6F3A">Proxy-resistant</text>
+    <text x="1160" y="72" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="16" font-weight="560" fill="#4B5A54">device-bound proofs</text>
+    <rect x="1450" y="18" width="318" height="68" rx="20" fill="#F5FAF7"/>
+    <text x="1500" y="46" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="18" font-weight="850" fill="#101816">Offline-first</text>
+    <text x="1500" y="72" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="16" font-weight="560" fill="#4B5A54">local capture and sync</text>
+    <rect x="1790" y="18" width="360" height="68" rx="20" fill="#F5FAF7"/>
+    <text x="1840" y="46" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="18" font-weight="850" fill="#101816">Institution-ready</text>
+    <text x="1840" y="72" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="16" font-weight="560" fill="#4B5A54">rosters records audit flow</text>
+  </g>
+</svg>
