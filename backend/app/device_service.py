@@ -73,12 +73,14 @@ def complete_enrollment(
     platform: str,
     display_label: str | None,
     app_instance_metadata: dict,
+    device_profile: dict[str, Any],
     key_protection: str,
 ) -> dict[str, Any]:
     if public_key_algorithm != SUPPORTED_ALGORITHM:
         raise ApiError("UNSUPPORTED_DEVICE_ALGORITHM", "Unsupported device key algorithm.", 400)
 
     fingerprint = _fingerprint_or_error(public_key)
+    profile = _validated_device_profile(device_profile)
     with _connect() as conn:
         with conn.transaction():
             challenge = _consume_challenge(
@@ -140,15 +142,29 @@ def complete_enrollment(
                         platform,
                         display_label,
                         app_instance_metadata,
+                        manufacturer,
+                        device_model,
+                        os_version,
+                        os_api_level,
+                        is_physical_device,
+                        integrity_status,
+                        integrity_checked_at,
+                        risk_flags,
                         key_protection,
                         status,
                         registered_at,
                         last_seen_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'ACTIVE', now(), now())
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, now(), %s, %s,
+                        'ACTIVE', now(), now()
+                    )
                     RETURNING id, student_id, public_key_algorithm, key_fingerprint,
                               platform, display_label, status::text AS status,
-                              registered_at, revoked_at, last_seen_at
+                              registered_at, revoked_at, last_seen_at,
+                              manufacturer, device_model, os_version, os_api_level,
+                              is_physical_device, integrity_status, risk_flags
                     """,
                     [
                         student_id,
@@ -158,6 +174,13 @@ def complete_enrollment(
                         platform,
                         display_label,
                         Jsonb(app_instance_metadata),
+                        profile["manufacturer"],
+                        profile["model"],
+                        profile["os_version"],
+                        profile["os_api_level"],
+                        profile["is_physical_device"],
+                        profile["integrity_status"],
+                        Jsonb(profile["risk_flags"]),
                         key_protection,
                     ],
                 ).fetchone()
@@ -174,7 +197,7 @@ def complete_enrollment(
                 "DEVICE_REGISTERED",
                 "device_registration",
                 device["id"],
-                {"key_fingerprint": fingerprint, "platform": platform},
+                {"key_fingerprint": fingerprint, "platform": platform, "device_profile": profile},
             )
             return dict(device)
 
@@ -257,12 +280,14 @@ def request_replacement(
     reason: str,
     display_label: str | None,
     app_instance_metadata: dict,
+    device_profile: dict[str, Any],
     key_protection: str,
 ) -> dict[str, Any]:
     if public_key_algorithm != SUPPORTED_ALGORITHM:
         raise ApiError("UNSUPPORTED_DEVICE_ALGORITHM", "Unsupported device key algorithm.", 400)
 
     fingerprint = _fingerprint_or_error(public_key)
+    profile = _validated_device_profile(device_profile)
     with _connect() as conn:
         with conn.transaction():
             active = _active_device(conn, student_id, lock=True)
@@ -293,9 +318,15 @@ def request_replacement(
                 """
                 INSERT INTO device_registrations (
                     student_id, public_key, public_key_algorithm, key_fingerprint,
-                    platform, display_label, app_instance_metadata, key_protection, status
+                    platform, display_label, app_instance_metadata,
+                    manufacturer, device_model, os_version, os_api_level,
+                    is_physical_device, integrity_status, integrity_checked_at, risk_flags,
+                    key_protection, status
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'PENDING')
+                VALUES (
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, now(), %s, %s, 'PENDING'
+                )
                 RETURNING id
                 """,
                 [
@@ -306,6 +337,13 @@ def request_replacement(
                     platform,
                     display_label,
                     Jsonb(app_instance_metadata),
+                    profile["manufacturer"],
+                    profile["model"],
+                    profile["os_version"],
+                    profile["os_api_level"],
+                    profile["is_physical_device"],
+                    profile["integrity_status"],
+                    Jsonb(profile["risk_flags"]),
                     key_protection,
                 ],
             ).fetchone()
@@ -342,12 +380,13 @@ def request_replacement(
                 {
                     "old_device_registration_id": str(active["id"]),
                     "new_device_registration_id": str(pending["id"]),
+                    "device_profile": profile,
                 },
             )
             return dict(request)
 
 
-def approve_replacement(*, request_id: UUID, approved_by: str) -> dict[str, Any]:
+def approve_replacement(*, request_id: UUID, approved_by: str, decision_note: str) -> dict[str, Any]:
     with _connect() as conn:
         with conn.transaction():
             request = conn.execute(
@@ -381,13 +420,14 @@ def approve_replacement(*, request_id: UUID, approved_by: str) -> dict[str, Any]
             updated = conn.execute(
                 """
                 UPDATE device_replacement_requests
-                SET status = 'APPROVED', approved_at = now(), approved_by = %s, updated_at = now()
+                SET status = 'APPROVED', approved_at = now(), approved_by = %s,
+                    decision_note = %s, decided_by = %s, decided_at = now(), updated_at = now()
                 WHERE id = %s
                 RETURNING id, student_id, old_device_registration_id,
                           new_device_registration_id, status::text AS status,
                           reason, requested_at, approved_at
                 """,
-                [approved_by, request_id],
+                [approved_by, decision_note, approved_by, request_id],
             ).fetchone()
             _audit(
                 conn,
@@ -395,9 +435,86 @@ def approve_replacement(*, request_id: UUID, approved_by: str) -> dict[str, Any]
                 "DEVICE_REPLACEMENT_APPROVED",
                 "device_replacement_request",
                 request_id,
-                {"approved_by": approved_by},
+                {"approved_by": approved_by, "decision_note": decision_note},
+            )
+    return dict(updated)
+
+
+def reject_replacement(*, request_id: UUID, rejected_by: str, decision_note: str) -> dict[str, Any]:
+    with _connect() as conn:
+        with conn.transaction():
+            request = conn.execute(
+                """
+                SELECT * FROM device_replacement_requests
+                WHERE id = %s AND status = 'PENDING'
+                FOR UPDATE
+                """,
+                [request_id],
+            ).fetchone()
+            if request is None:
+                raise ApiError("REPLACEMENT_NOT_FOUND", "Pending replacement request was not found.", 404)
+            conn.execute(
+                """
+                UPDATE device_registrations
+                SET status = 'REVOKED', revoked_at = now(), updated_at = now()
+                WHERE id = %s AND status = 'PENDING'
+                """,
+                [request["new_device_registration_id"]],
+            )
+            updated = conn.execute(
+                """
+                UPDATE device_replacement_requests
+                SET status = 'REJECTED', rejected_at = now(), decision_note = %s,
+                    decided_by = %s, decided_at = now(), updated_at = now()
+                WHERE id = %s
+                RETURNING id, student_id, old_device_registration_id, new_device_registration_id,
+                          status::text AS status, reason, requested_at, approved_at
+                """,
+                [decision_note, rejected_by, request_id],
+            ).fetchone()
+            _audit(
+                conn,
+                updated["student_id"],
+                "DEVICE_REPLACEMENT_REJECTED",
+                "device_replacement_request",
+                request_id,
+                {"rejected_by": rejected_by, "decision_note": decision_note},
             )
             return dict(updated)
+
+
+def revoke_device(*, device_registration_id: UUID, revoked_by: str, reason: str) -> dict[str, Any]:
+    with _connect() as conn:
+        with conn.transaction():
+            device = conn.execute(
+                """
+                SELECT id, student_id, status::text AS status
+                FROM device_registrations WHERE id = %s FOR UPDATE
+                """,
+                [device_registration_id],
+            ).fetchone()
+            if device is None:
+                raise ApiError("DEVICE_NOT_FOUND", "Device registration was not found.", 404)
+            if device["status"] == "REVOKED":
+                raise ApiError("DEVICE_ALREADY_REVOKED", "Device is already revoked.", 409)
+            conn.execute(
+                """
+                UPDATE device_registrations
+                SET status = 'REVOKED', revoked_at = now(), integrity_status = 'REVIEW_REQUIRED',
+                    updated_at = now()
+                WHERE id = %s
+                """,
+                [device_registration_id],
+            )
+            _audit(
+                conn,
+                device["student_id"],
+                "DEVICE_REVOKED_BY_ADMIN",
+                "device_registration",
+                device_registration_id,
+                {"revoked_by": revoked_by, "reason": reason},
+            )
+            return {"id": device_registration_id, "status": "REVOKED"}
 
 
 def current_device(student_id: UUID) -> dict[str, Any] | None:
@@ -504,6 +621,47 @@ def _consume_challenge(
     return dict(challenge)
 
 
+def _validated_device_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    """Accept only privacy-safe device facts; hardware IDs never enter the protocol."""
+    physical = profile.get("is_physical_device")
+    emulator = profile.get("is_emulator")
+    if emulator is True or physical is False:
+        raise ApiError(
+            "EMULATOR_NOT_ALLOWED",
+            "Attendance registration requires a physical mobile device.",
+            403,
+        )
+    manufacturer = _profile_text(profile.get("manufacturer"), 80)
+    model = _profile_text(profile.get("model"), 120)
+    os_version = _profile_text(profile.get("os_version"), 48)
+    api_level = profile.get("os_api_level")
+    if api_level is not None and (not isinstance(api_level, int) or not 1 <= api_level <= 100):
+        raise ApiError("INVALID_DEVICE_PROFILE", "Invalid device OS level.", 400)
+    risk_flags = ["INTEGRITY_UNVERIFIED"]
+    if physical is None:
+        risk_flags.append("PHYSICAL_STATUS_UNDECLARED")
+    return {
+        "manufacturer": manufacturer,
+        "model": model,
+        "os_version": os_version,
+        "os_api_level": api_level,
+        "is_physical_device": physical,
+        "integrity_status": "DECLARED_PHYSICAL" if physical is True else "UNVERIFIED",
+        "risk_flags": risk_flags,
+    }
+
+
+def _profile_text(value: Any, limit: int) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ApiError("INVALID_DEVICE_PROFILE", "Invalid device profile field.", 400)
+    normalized = value.strip()
+    if len(normalized) > limit:
+        raise ApiError("INVALID_DEVICE_PROFILE", "Device profile field is too long.", 400)
+    return normalized or None
+
+
 def _active_device(
     conn: psycopg.Connection,
     student_id: UUID,
@@ -515,7 +673,8 @@ def _active_device(
         f"""
         SELECT id, student_id, public_key, public_key_algorithm, key_fingerprint,
                platform, display_label, status::text AS status,
-               registered_at, revoked_at, last_seen_at
+               registered_at, revoked_at, last_seen_at, manufacturer, device_model,
+               os_version, os_api_level, is_physical_device, integrity_status, risk_flags
         FROM device_registrations
         WHERE student_id = %s AND status = 'ACTIVE'
         {suffix}
@@ -536,7 +695,8 @@ def _get_device_for_update(
         f"""
         SELECT id, student_id, public_key, public_key_algorithm, key_fingerprint,
                platform, display_label, status::text AS status,
-               registered_at, revoked_at, last_seen_at
+               registered_at, revoked_at, last_seen_at, manufacturer, device_model,
+               os_version, os_api_level, is_physical_device, integrity_status, risk_flags
         FROM device_registrations
         WHERE id = %s AND student_id = %s
         {suffix}

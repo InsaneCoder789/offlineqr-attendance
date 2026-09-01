@@ -10,4 +10,5 @@ psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -f backend/migrations/002_goal03_device_se
 psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -f backend/migrations/003_goal04_attendance_portal.up.sql
 psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -f backend/migrations/004_goal06_presence_protocol.up.sql
 psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -f backend/migrations/005_goal08_security_hardening.up.sql
+psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -f backend/migrations/006_goal09_admin_device_governance.up.sql
 psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -f backend/seeds/goal02_dev_seed.sql

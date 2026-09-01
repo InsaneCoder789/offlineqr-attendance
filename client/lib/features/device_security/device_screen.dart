@@ -6,6 +6,7 @@ import '../../core/database/local_database.dart';
 import '../../core/network/api_config.dart';
 import '../../core/security/attendance_device_guard.dart';
 import '../../core/security/device_registration_service.dart';
+import '../../core/security/device_profile.dart';
 import '../../core/security/secure_device_key_store.dart';
 import '../../ui/kiit_components.dart';
 import '../../ui/kiit_theme.dart';
@@ -27,6 +28,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
   AttendanceDeviceGuardOutcome? guardOutcome;
   String? message;
   bool busy = false;
+  final DeviceProfileCollector _profileCollector = const DeviceProfileCollector();
 
   @override
   void initState() {
@@ -67,6 +69,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
         platform: Platform.isAndroid ? 'Android' : Platform.operatingSystem,
         displayLabel:
             Platform.isAndroid ? 'Android Device' : 'Development Device',
+        deviceProfile: await _profileCollector.collect(),
       );
       message = 'Device registered.';
     });
@@ -111,8 +114,9 @@ class _DeviceScreenState extends State<DeviceScreen> {
         reason: 'Primary phone unavailable, lost, or app reinstalled',
         displayLabel:
             Platform.isAndroid ? 'Android Device' : 'Development Device',
+        deviceProfile: await _profileCollector.collect(),
       );
-      message = 'Device relinked after replacement approval.';
+      message = 'Replacement request sent to ICT. This phone remains blocked until approved.';
     });
   }
 

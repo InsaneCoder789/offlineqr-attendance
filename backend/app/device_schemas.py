@@ -1,7 +1,24 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+class DeviceProfileIn(BaseModel):
+    """Privacy-minimized facts declared by the attendance app, never raw hardware IDs."""
+
+    manufacturer: str | None = Field(default=None, max_length=80)
+    model: str | None = Field(default=None, max_length=120)
+    os_version: str | None = Field(default=None, max_length=48)
+    os_api_level: int | None = Field(default=None, ge=1, le=100)
+    app_version: str | None = Field(default=None, max_length=48)
+    is_physical_device: bool | None = None
+    is_emulator: bool | None = None
+
+    @field_validator("manufacturer", "model", "os_version", "app_version")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        return value.strip() if value else None
 
 
 class DeviceChallengeOut(BaseModel):
@@ -20,6 +37,7 @@ class EnrollmentCompleteIn(BaseModel):
     platform: str
     display_label: str | None = None
     app_instance_metadata: dict = Field(default_factory=dict)
+    device_profile: DeviceProfileIn = Field(default_factory=DeviceProfileIn)
     key_protection: str = "SOFTWARE_PROTECTED"
 
 
@@ -34,6 +52,13 @@ class DeviceRegistrationOut(BaseModel):
     registered_at: datetime | None
     revoked_at: datetime | None
     last_seen_at: datetime | None
+    manufacturer: str | None = None
+    device_model: str | None = None
+    os_version: str | None = None
+    os_api_level: int | None = None
+    is_physical_device: bool | None = None
+    integrity_status: str = "UNVERIFIED"
+    risk_flags: list[str] = Field(default_factory=list)
 
 
 class VerificationChallengeIn(BaseModel):
@@ -61,6 +86,7 @@ class ReplacementRequestIn(BaseModel):
     reason: str
     display_label: str | None = None
     app_instance_metadata: dict = Field(default_factory=dict)
+    device_profile: DeviceProfileIn = Field(default_factory=DeviceProfileIn)
     key_protection: str = "SOFTWARE_PROTECTED"
 
 
@@ -74,3 +100,54 @@ class ReplacementRequestOut(BaseModel):
     requested_at: datetime
     approved_at: datetime | None
 
+
+class AdminDeviceSummaryOut(BaseModel):
+    id: UUID
+    device_reference: str
+    student_id: UUID
+    roll_number: str
+    student_name: str
+    section_code: str
+    status: str
+    platform: str
+    manufacturer: str | None = None
+    device_model: str | None = None
+    os_version: str | None = None
+    is_physical_device: bool | None = None
+    integrity_status: str
+    risk_flags: list[str] = Field(default_factory=list)
+    display_label: str | None = None
+    registered_at: datetime | None = None
+    last_seen_at: datetime | None = None
+    pending_replacement_id: UUID | None = None
+
+
+class AdminDeviceDetailOut(AdminDeviceSummaryOut):
+    key_fingerprint: str
+    revoked_at: datetime | None = None
+    app_instance_metadata: dict = Field(default_factory=dict)
+
+
+class AdminDeviceHistoryOut(BaseModel):
+    id: UUID
+    event_type: str
+    actor_type: str
+    occurred_at: datetime
+    correlation_id: str
+    metadata: dict = Field(default_factory=dict)
+
+
+class AdminDeviceStatsOut(BaseModel):
+    total_devices: int
+    active_devices: int
+    pending_replacements: int
+    review_required: int
+    revoked_devices: int
+
+
+class AdminDecisionIn(BaseModel):
+    note: str = Field(min_length=3, max_length=280)
+
+
+class AdminRevokeIn(BaseModel):
+    reason: str = Field(min_length=3, max_length=280)

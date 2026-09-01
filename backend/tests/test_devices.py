@@ -21,6 +21,10 @@ from backend.app.device_crypto import (
 from backend.app.main import app
 
 DEV_STUDENT_ID = UUID("50000000-0000-4000-8000-000000000001")
+ICT_HEADERS = {
+    "x-ict-approval-key": get_settings().ict_admin_approval_key,
+    "x-ict-operator": "test-ict-admin",
+}
 
 
 def _signing_key(seed_byte: int) -> SigningKey:
@@ -133,7 +137,9 @@ class DeviceApiTest(unittest.TestCase):
 
         replacement = self._request_replacement(seed_byte=7)
         self.client.post(
-            f"/api/v1/devices/replacement-requests/{replacement['id']}/approve"
+            f"/api/v1/admin/device-replacements/{replacement['id']}/approve",
+            json={"note": "Verified device switch for test coverage."},
+            headers=ICT_HEADERS,
         )
         revoked = self.client.post(
             "/api/v1/devices/verification/challenge",
@@ -146,7 +152,9 @@ class DeviceApiTest(unittest.TestCase):
         old = self._enroll(seed_byte=8)
         replacement = self._request_replacement(seed_byte=9)
         approved = self.client.post(
-            f"/api/v1/devices/replacement-requests/{replacement['id']}/approve"
+            f"/api/v1/admin/device-replacements/{replacement['id']}/approve",
+            json={"note": "Verified device switch for test coverage."},
+            headers=ICT_HEADERS,
         )
 
         self.assertEqual(approved.status_code, 200)
@@ -260,7 +268,13 @@ class DeviceApiTest(unittest.TestCase):
         )
         return self._complete_enrollment(challenge, public_key, signature)
 
-    def _complete_enrollment(self, challenge: dict, public_key: str, signature: str):
+    def _complete_enrollment(
+        self,
+        challenge: dict,
+        public_key: str,
+        signature: str,
+        device_profile: dict | None = None,
+    ):
         return self.client.post(
             "/api/v1/devices/enrollment/complete",
             json={
@@ -270,6 +284,7 @@ class DeviceApiTest(unittest.TestCase):
                 "platform": "Android",
                 "display_label": "Test Android Device",
                 "app_instance_metadata": {"app_version": "goal03-test"},
+                "device_profile": device_profile or {},
                 "key_protection": "SOFTWARE_PROTECTED",
             },
         )

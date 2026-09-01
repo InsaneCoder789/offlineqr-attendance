@@ -46,6 +46,12 @@ from .attendance_service import (
 )
 from .config import get_settings, validate_production_settings
 from .device_schemas import (
+    AdminDecisionIn,
+    AdminDeviceDetailOut,
+    AdminDeviceHistoryOut,
+    AdminDeviceStatsOut,
+    AdminDeviceSummaryOut,
+    AdminRevokeIn,
     DeviceChallengeOut,
     DeviceRegistrationOut,
     DeviceVerificationOut,
@@ -65,6 +71,15 @@ from .device_service import (
     current_device,
     current_replacement_request,
     request_replacement,
+    reject_replacement,
+    revoke_device,
+)
+from .admin_service import (
+    admin_device_detail,
+    admin_device_history,
+    admin_device_stats,
+    admin_devices,
+    admin_pending_replacements,
 )
 from .errors import ApiError, api_error_handler
 from .repositories import bootstrap_student_sync, get_faculty_by_identity, get_student, get_student_by_email
@@ -293,6 +308,7 @@ def device_enrollment_complete(payload: EnrollmentCompleteIn, request: Request) 
         platform=payload.platform,
         display_label=payload.display_label,
         app_instance_metadata=payload.app_instance_metadata,
+        device_profile=payload.device_profile.model_dump(),
         key_protection=payload.key_protection,
     )
 
@@ -349,6 +365,7 @@ def device_replacement_request(payload: ReplacementRequestIn, request: Request) 
         reason=payload.reason,
         display_label=payload.display_label,
         app_instance_metadata=payload.app_instance_metadata,
+        device_profile=payload.device_profile.model_dump(),
         key_protection=payload.key_protection,
     )
 
@@ -361,11 +378,52 @@ def device_replacement_current(request: Request) -> dict | None:
     return current_replacement_request(_student_id_from_request(request))
 
 
-@app.post(
-    "/api/v1/devices/replacement-requests/{request_id}/approve",
-    response_model=ReplacementRequestOut,
-)
-def device_replacement_approve(request_id: UUID, request: Request) -> dict:
-    require_ict_approval(request)
+@app.get("/api/v1/admin/device-stats", response_model=AdminDeviceStatsOut)
+def admin_device_statistics(request: Request) -> dict:
+    require_ict_approval(request, strict=True)
+    return admin_device_stats()
+
+
+@app.get("/api/v1/admin/devices", response_model=list[AdminDeviceSummaryOut])
+def admin_device_list(request: Request, query: str | None = None, status: str | None = None) -> list[dict]:
+    require_ict_approval(request, strict=True)
+    return admin_devices(query=query, status=status)
+
+
+@app.get("/api/v1/admin/devices/{device_registration_id}", response_model=AdminDeviceDetailOut)
+def admin_device_get(device_registration_id: UUID, request: Request) -> dict:
+    require_ict_approval(request, strict=True)
+    return admin_device_detail(device_registration_id)
+
+
+@app.get("/api/v1/admin/devices/{device_registration_id}/history", response_model=list[AdminDeviceHistoryOut])
+def admin_device_audit_history(device_registration_id: UUID, request: Request) -> list[dict]:
+    require_ict_approval(request, strict=True)
+    return admin_device_history(device_registration_id)
+
+
+@app.get("/api/v1/admin/device-replacements")
+def admin_replacement_list(request: Request) -> list[dict]:
+    require_ict_approval(request, strict=True)
+    return admin_pending_replacements()
+
+
+@app.post("/api/v1/admin/device-replacements/{request_id}/approve", response_model=ReplacementRequestOut)
+def admin_replacement_approve(request_id: UUID, payload: AdminDecisionIn, request: Request) -> dict:
+    require_ict_approval(request, strict=True)
     approver = request.headers.get("x-ict-operator", "ict-admin")
-    return approve_replacement(request_id=request_id, approved_by=approver)
+    return approve_replacement(request_id=request_id, approved_by=approver, decision_note=payload.note)
+
+
+@app.post("/api/v1/admin/device-replacements/{request_id}/reject", response_model=ReplacementRequestOut)
+def admin_replacement_reject(request_id: UUID, payload: AdminDecisionIn, request: Request) -> dict:
+    require_ict_approval(request, strict=True)
+    approver = request.headers.get("x-ict-operator", "ict-admin")
+    return reject_replacement(request_id=request_id, rejected_by=approver, decision_note=payload.note)
+
+
+@app.post("/api/v1/admin/devices/{device_registration_id}/revoke")
+def admin_device_revoke(device_registration_id: UUID, payload: AdminRevokeIn, request: Request) -> dict:
+    require_ict_approval(request, strict=True)
+    approver = request.headers.get("x-ict-operator", "ict-admin")
+    return revoke_device(device_registration_id=device_registration_id, revoked_by=approver, reason=payload.reason)

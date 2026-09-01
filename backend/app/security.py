@@ -58,10 +58,10 @@ class SlidingWindowRateLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def require_ict_approval(request: Request) -> None:
+def require_ict_approval(request: Request, *, strict: bool = False) -> None:
     settings = get_settings()
     supplied = request.headers.get("x-ict-approval-key", "")
-    if settings.development_enabled and not supplied:
+    if settings.development_enabled and not strict and not supplied:
         return
     if not secrets.compare_digest(supplied, settings.ict_admin_approval_key):
         raise ApiError("ICT_APPROVAL_REQUIRED", "An ICT approval credential is required.", 403)

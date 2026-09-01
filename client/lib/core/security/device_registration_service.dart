@@ -24,6 +24,7 @@ class DeviceRegistrationService {
     required String studentId,
     required String platform,
     String displayLabel = 'Development Device',
+    Map<String, dynamic> deviceProfile = const {},
   }) async {
     final client = _client ?? http.Client();
     final challengeResponse = await client
@@ -63,6 +64,7 @@ class DeviceRegistrationService {
             'signature': signature,
             'platform': platform,
             'display_label': displayLabel,
+            'device_profile': deviceProfile,
             'key_protection': 'SOFTWARE_PROTECTED',
           }),
         )
@@ -94,11 +96,12 @@ class DeviceRegistrationService {
     return registration;
   }
 
-  Future<DeviceRegistration> requestReplacement({
+  Future<void> requestReplacement({
     required String studentId,
     required String platform,
     String reason = 'App reinstalled or local credential unavailable',
     String displayLabel = 'Relinked Device',
+    Map<String, dynamic> deviceProfile = const {},
   }) async {
     final client = _client ?? http.Client();
     final challengeResponse = await client
@@ -139,27 +142,16 @@ class DeviceRegistrationService {
             'platform': platform,
             'reason': reason,
             'display_label': displayLabel,
+            'device_profile': deviceProfile,
             'key_protection': 'SOFTWARE_PROTECTED',
           }),
         )
         .timeout(apiRequestTimeout);
     _throwOnError(response);
     final replacement = jsonDecode(response.body) as Map<String, dynamic>;
-    final approvalResponse = await client
-        .post(
-          baseUri.resolve(
-            '/api/v1/devices/replacement-requests/${replacement['id']}/approve',
-          ),
-          headers: _studentHeaders(studentId),
-        )
-        .timeout(apiRequestTimeout);
-    _throwOnError(approvalResponse);
-    final registration = await currentDevice(studentId: studentId);
-    if (registration == null) {
-      throw StateError(
-          'Replacement approved, but no active device was returned.');
+    if (replacement['status'] != 'PENDING') {
+      throw StateError('Replacement request was not queued for ICT review.');
     }
-    return registration;
   }
 
   Future<void> verify({
