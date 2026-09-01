@@ -9,6 +9,7 @@ class Settings:
     dev_student_id: str
     dev_faculty_id: str
     institution_signing_seed_b64url: str
+    ict_admin_approval_key: str
 
     @property
     def development_enabled(self) -> bool:
@@ -34,4 +35,19 @@ def get_settings() -> Settings:
             "INSTITUTION_SIGNING_SEED_B64URL",
             "ERERERERERERERERERERERERERERERERERERERERERE",
         ),
+        ict_admin_approval_key=os.environ.get(
+            "ICT_ADMIN_APPROVAL_KEY",
+            "development-ict-approval-key-change-me",
+        ),
     )
+
+
+def validate_production_settings() -> None:
+    """Fail closed when a production deployment still has demo credentials."""
+    settings = get_settings()
+    if settings.development_enabled:
+        return
+    if settings.institution_signing_seed_b64url == "ERERERERERERERERERERERERERERERERERERERERERE":
+        raise RuntimeError("INSTITUTION_SIGNING_SEED_B64URL must be set outside development")
+    if len(settings.ict_admin_approval_key) < 32:
+        raise RuntimeError("ICT_ADMIN_APPROVAL_KEY must be at least 32 characters outside development")

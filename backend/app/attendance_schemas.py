@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class TimetableEntryOut(BaseModel):
@@ -73,6 +73,8 @@ class FacultySessionOut(BaseModel):
     scheduled_end: datetime
     started_at: datetime | None
     closed_at: datetime | None
+    reconcile_until: datetime | None = None
+    reconciliation_state: str | None = None
     state: str
     authorization: SessionAuthorizationOut | None
 
@@ -142,7 +144,23 @@ class FacultyRegisterOut(BaseModel):
 
 class FacultyAttestationIn(BaseModel):
     student_id: UUID
-    reason: str
+    reason: str = Field(min_length=3, max_length=120)
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, value: str) -> str:
+        allowed = {
+            "Student device failure",
+            "QR scanning failure",
+            "Local connectivity failure",
+            "Device registration problem",
+            "System error",
+            "Other approved reason",
+        }
+        normalized = value.strip()
+        if normalized not in allowed:
+            raise ValueError("Use an approved faculty attestation reason.")
+        return normalized
 
 
 class QrPayloadOut(BaseModel):
@@ -164,6 +182,9 @@ class AttendanceClaimIn(BaseModel):
     device_registration_id: UUID
     qr_epoch: int
     qr_challenge: str
+    qr_issued_at: datetime
+    qr_expires_at: datetime
+    qr_signature: str
     qr_captured_at: datetime
     claim_created_at: datetime
     claim_expires_at: datetime

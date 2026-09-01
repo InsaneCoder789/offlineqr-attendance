@@ -6,7 +6,6 @@ import 'package:http/http.dart' as http;
 import '../attendance/attendance_qr_protocol.dart';
 import '../database/local_database.dart';
 import '../network/api_config.dart';
-import '../presence/presence_protocol.dart';
 import '../security/device_crypto.dart';
 
 const int proofSyncBatchLimit = 20;
@@ -159,127 +158,9 @@ class AttendanceProofSyncService {
   }
 
   Future<int> _repairRejectedProofs() async {
-    final signer = await keyStore?.loadSigner();
-    if (signer == null) return 0;
-    final entries = database.repairableRejectedOutboxEntries();
-    var repaired = 0;
-    for (final entry in entries) {
-      try {
-        final activeDevice = entry.lastErrorCode == 'DEVICE_REVOKED'
-            ? await _currentServerDevice(entry.studentId)
-            : null;
-        if (entry.lastErrorCode == 'DEVICE_REVOKED' && activeDevice == null) {
-          continue;
-        }
-        final payload = jsonDecode(entry.payloadJson) as Map<String, dynamic>;
-        final claim = payload['claim'] as Map<String, dynamic>;
-        final response = payload['response'] as Map<String, dynamic>;
-        final proof = payload['proof'] as Map<String, dynamic>;
-        if (activeDevice != null) {
-          final activeDeviceId = activeDevice.deviceRegistrationId;
-          claim['device_registration_id'] = activeDeviceId;
-          response['device_registration_id'] = activeDeviceId;
-          proof['device_registration_id'] = activeDeviceId;
-          database.saveDeviceProjection(activeDevice);
-        }
-
-        claim['qr_captured_at'] = _normalizeTimestamp(claim['qr_captured_at']);
-        claim['claim_created_at'] =
-            _normalizeTimestamp(claim['claim_created_at']);
-        claim['claim_expires_at'] =
-            _normalizeTimestamp(claim['claim_expires_at']);
-        response['responded_at'] =
-            _normalizeTimestamp(response['responded_at']);
-        proof['proof_created_at'] =
-            _normalizeTimestamp(proof['proof_created_at']);
-
-        claim['device_signature'] = await signer.sign(
-          canonicalAttendanceClaim(
-            claimId: claim['claim_id'] as String,
-            sessionId: claim['session_id'] as String,
-            studentId: claim['student_id'] as String,
-            deviceRegistrationId: claim['device_registration_id'] as String,
-            qrEpoch: claim['qr_epoch'] as int,
-            qrChallenge: claim['qr_challenge'] as String,
-            qrCapturedAt: claim['qr_captured_at'] as String,
-            claimCreatedAt: claim['claim_created_at'] as String,
-            claimExpiresAt: claim['claim_expires_at'] as String,
-          ),
-        );
-        response['device_signature'] = await signer.sign(
-          canonicalPresenceResponse(
-            responseId: response['response_id'] as String,
-            challengeId: response['challenge_id'] as String,
-            sessionId: response['session_id'] as String,
-            claimId: response['claim_id'] as String,
-            deviceRegistrationId: response['device_registration_id'] as String,
-            presenceEpoch: response['presence_epoch'] as int,
-            respondedAt: response['responded_at'] as String,
-            transport: response['transport'] as String,
-            challengeNonce: response['challenge_nonce'] as String,
-            hostPublicKey: response['host_public_key'] as String,
-          ),
-        );
-        proof['final_device_signature'] = await signer.sign(
-          canonicalAttendanceProof(
-            proofId: proof['proof_id'] as String,
-            claimId: proof['claim_id'] as String,
-            sessionId: proof['session_id'] as String,
-            studentId: proof['student_id'] as String,
-            deviceRegistrationId: proof['device_registration_id'] as String,
-            presenceChallengeId: proof['presence_challenge_id'] as String,
-            presenceResponseId: proof['presence_response_id'] as String,
-            proofCreatedAt: proof['proof_created_at'] as String,
-          ),
-        );
-        database.updateProofPayloadAndRequeue(
-          proofId: entry.proofId,
-          payloadJson: jsonEncode(payload),
-          now: canonicalUtcTimestamp(DateTime.now()),
-          claimId: claim['claim_id'] as String,
-          deviceRegistrationId: proof['device_registration_id'] as String,
-        );
-        repaired++;
-      } catch (_) {
-        continue;
-      }
-    }
-    return repaired;
-  }
-
-  Future<DeviceRegistrationProjection?> _currentServerDevice(
-      String studentId) async {
-    final client = _client ?? http.Client();
-    try {
-      final response = await client.get(
-        baseUri.resolve('/api/v1/devices/current'),
-        headers: {'X-Student-Id': studentId},
-      ).timeout(apiRequestTimeout);
-      if (response.statusCode != 200 || response.body == 'null') {
-        return null;
-      }
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      return DeviceRegistrationProjection(
-        deviceRegistrationId: body['id'] as String,
-        studentId: body['student_id'] as String,
-        status: body['status'] as String,
-        keyFingerprint: body['key_fingerprint'] as String,
-        platform: body['platform'] as String,
-        displayLabel: body['display_label'] as String?,
-        lastVerifiedAt: body['last_seen_at'] as String?,
-        serverVersion: 1,
-      );
-    } finally {
-      if (_client == null) {
-        client.close();
-      }
-    }
-  }
-
-  String _normalizeTimestamp(Object? value) {
-    final text = value as String;
-    final parsed = DateTime.parse(text);
-    return canonicalUtcTimestamp(parsed);
+    // Never mutate a signed proof after capture. A replacement device must not
+    // be able to impersonate the device that observed the classroom QR.
+    return 0;
   }
 
   void _markBatchRetry(List<AttendanceProofOutboxEntry> entries, String code) {

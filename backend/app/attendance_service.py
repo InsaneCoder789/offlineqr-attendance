@@ -22,6 +22,7 @@ from .attendance_protocol import (
     institution_public_key,
     institution_signing_key,
     sign,
+    verify,
 )
 from .config import get_settings
 from .device_crypto import verify_signature
@@ -125,7 +126,7 @@ def start_attendance_session(faculty_id: UUID, course_offering_id: UUID) -> dict
                 SELECT id FROM attendance_sessions
                 WHERE course_offering_id = %s
                   AND scheduled_start = %s
-                  AND state IN ('CREATED', 'ACTIVE')
+                  AND state IN ('CREATED', 'ACTIVE', 'SYNCING')
                 ORDER BY created_at DESC LIMIT 1
                 """,
                 [course_offering_id, scheduled_start],
@@ -180,12 +181,39 @@ def close_attendance_session(faculty_id: UUID, session_id: UUID) -> dict:
             conn.execute(
                 """
                 UPDATE attendance_sessions
-                SET state = 'CLOSED', closed_at = now(), updated_at = now()
+                SET state = 'SYNCING', closed_at = now(),
+                    reconcile_until = now() + interval '7 days',
+                    reconciliation_state = 'PENDING', updated_at = now()
                 WHERE id = %s AND state = 'ACTIVE'
                 """,
                 [session_id],
             )
             _audit(conn, "ATTENDANCE_SESSION_CLOSED", "attendance_session", session_id, str(faculty_id))
+            session = _session_by_id(conn, session_id)
+            session["authorization"] = _authorization_for_session(conn, session_id, include_private=True)
+            return session
+
+
+def finalize_reconciliation(faculty_id: UUID, session_id: UUID) -> dict:
+    """Seal a closed session after its offline-proof reconciliation window."""
+    with _connect() as conn:
+        with conn.transaction():
+            session = _session_by_id(conn, session_id)
+            if str(session["created_by_faculty_id"]) != str(faculty_id):
+                raise ApiError("FACULTY_NOT_AUTHORIZED", "Faculty cannot finalize this session.", 403)
+            if session["state"] != "SYNCING":
+                raise ApiError("SESSION_NOT_SYNCING", "Session is not waiting for reconciliation.", 409)
+            if session["reconcile_until"] is None or datetime.now(UTC) < _aware(session["reconcile_until"]):
+                raise ApiError("RECONCILIATION_WINDOW_OPEN", "Offline-proof reconciliation is still open.", 409)
+            conn.execute(
+                """
+                UPDATE attendance_sessions
+                SET state = 'RECONCILED', reconciliation_state = 'RECONCILED', updated_at = now()
+                WHERE id = %s AND state = 'SYNCING'
+                """,
+                [session_id],
+            )
+            _audit(conn, "ATTENDANCE_SESSION_RECONCILED", "attendance_session", session_id, str(faculty_id))
             session = _session_by_id(conn, session_id)
             session["authorization"] = _authorization_for_session(conn, session_id, include_private=True)
             return session
@@ -317,7 +345,7 @@ def faculty_register(faculty_id: UUID, course_offering_id: UUID) -> dict:
                    to_char(scheduled_start, 'DD Mon') AS label
             FROM attendance_sessions
             WHERE course_offering_id = %s
-              AND state = 'CLOSED'
+              AND state IN ('SYNCING', 'RECONCILED')
               AND scheduled_start <= now()
             ORDER BY scheduled_start
             LIMIT 40
@@ -398,6 +426,8 @@ def attest_student(faculty_id: UUID, session_id: UUID, student_id: UUID, reason:
             session = _session_by_id(conn, session_id)
             if str(session["created_by_faculty_id"]) != str(faculty_id):
                 raise ApiError("FACULTY_NOT_AUTHORIZED", "Faculty cannot attest this session.", 403)
+            if session["state"] not in ("ACTIVE", "SYNCING"):
+                raise ApiError("SESSION_RECONCILED", "This attendance session can no longer be amended.", 409)
             rostered = conn.execute(
                 "SELECT 1 FROM attendance_session_roster WHERE attendance_session_id = %s AND student_id = %s",
                 [session_id, student_id],
@@ -474,7 +504,6 @@ def qr_payload_for(session_id: UUID, now: datetime | None = None) -> dict:
 
 
 def submit_attendance_claim(payload: dict) -> dict:
-    now = datetime.now(UTC)
     with _connect() as conn:
         with conn.transaction():
             session = _session_by_id(conn, payload["session_id"])
@@ -498,8 +527,7 @@ def submit_attendance_claim(payload: dict) -> dict:
             ).fetchone()
             if device is None:
                 raise ApiError("DEVICE_NOT_AUTHORIZED", "Attendance device is not authorized.", 403)
-            if _aware(payload["claim_expires_at"]) <= now:
-                raise ApiError("CLAIM_EXPIRED", "Attendance claim has expired.", 409)
+            _validate_signed_qr_evidence(conn, payload, session)
             canonical = canonical_attendance_claim(
                 claim_id=payload["claim_id"],
                 session_id=payload["session_id"],
@@ -507,6 +535,9 @@ def submit_attendance_claim(payload: dict) -> dict:
                 device_registration_id=payload["device_registration_id"],
                 qr_epoch=payload["qr_epoch"],
                 qr_challenge=payload["qr_challenge"],
+                qr_issued_at=_aware(payload["qr_issued_at"]).isoformat(),
+                qr_expires_at=_aware(payload["qr_expires_at"]).isoformat(),
+                qr_signature=payload["qr_signature"],
                 qr_captured_at=_aware(payload["qr_captured_at"]).isoformat(),
                 claim_created_at=_aware(payload["claim_created_at"]).isoformat(),
                 claim_expires_at=_aware(payload["claim_expires_at"]).isoformat(),
@@ -517,10 +548,11 @@ def submit_attendance_claim(payload: dict) -> dict:
                 """
                 INSERT INTO attendance_claims (
                     claim_id, attendance_session_id, student_id, device_registration_id,
-                    qr_epoch, qr_challenge, qr_captured_at, claim_created_at,
+                    qr_epoch, qr_challenge, qr_issued_at, qr_expires_at,
+                    qr_signature, qr_captured_at, claim_created_at,
                     claim_expires_at, claim_state, device_signature
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'AWAITING_PRESENCE', %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'AWAITING_PRESENCE', %s)
                 ON CONFLICT (attendance_session_id, student_id)
                 DO UPDATE SET updated_at = now()
                 RETURNING claim_id, attendance_session_id AS session_id,
@@ -533,6 +565,9 @@ def submit_attendance_claim(payload: dict) -> dict:
                     payload["device_registration_id"],
                     payload["qr_epoch"],
                     payload["qr_challenge"],
+                    payload["qr_issued_at"],
+                    payload["qr_expires_at"],
+                    payload["qr_signature"],
                     payload["qr_captured_at"],
                     payload["claim_created_at"],
                     payload["claim_expires_at"],
@@ -612,14 +647,16 @@ def _reconcile_attendance_proof(conn, submission: dict) -> dict:
 
     device = conn.execute(
         """
-        SELECT id, public_key FROM device_registrations
-        WHERE id = %s AND student_id = %s AND status = 'ACTIVE'
+        SELECT id, public_key, status::text AS status, revoked_at
+        FROM device_registrations
+        WHERE id = %s AND student_id = %s
         """,
         [proof["device_registration_id"], proof["student_id"]],
     ).fetchone()
     if device is None:
         raise ApiError("DEVICE_REVOKED", "Attendance device is not active for this student.", 403)
 
+    _ensure_device_was_valid_at_capture(device, claim_payload)
     _ensure_claim_for_proof(conn, claim_payload, device["public_key"], session)
     _verify_presence_and_proof_signatures(device["public_key"], challenge, response, proof)
 
@@ -769,11 +806,18 @@ def _ensure_claim_for_proof(conn, payload: dict, public_key: str, session: dict)
     captured_at = _aware(payload["qr_captured_at"])
     created_at = _aware(payload["claim_created_at"])
     expires_at = _aware(payload["claim_expires_at"])
-    scheduled_end = _aware(session["scheduled_end"])
+    if session["state"] not in ("ACTIVE", "SYNCING"):
+        raise ApiError("SESSION_RECONCILED", "This attendance session no longer accepts proofs.", 409)
+    reconcile_until = session.get("reconcile_until")
+    if session["state"] == "SYNCING" and (
+        reconcile_until is None or now > _aware(reconcile_until)
+    ):
+        raise ApiError("RECONCILIATION_WINDOW_CLOSED", "The reconciliation window has closed.", 409)
     if created_at > expires_at:
         raise ApiError("CLAIM_EXPIRED", "Claim timestamps are invalid.", 409)
-    if captured_at > scheduled_end + timedelta(days=1):
-        raise ApiError("QR_EXPIRED", "Claim was captured outside the reconciliation window.", 409)
+    if created_at < captured_at or created_at > captured_at + timedelta(seconds=60 + CLOCK_SKEW_SECONDS):
+        raise ApiError("CLAIM_EXPIRED", "Claim creation is outside the allowed 60-second window.", 409)
+    _validate_signed_qr_evidence(conn, payload, session)
     canonical = canonical_attendance_claim(
         claim_id=payload["claim_id"],
         session_id=payload["session_id"],
@@ -781,6 +825,9 @@ def _ensure_claim_for_proof(conn, payload: dict, public_key: str, session: dict)
         device_registration_id=payload["device_registration_id"],
         qr_epoch=payload["qr_epoch"],
         qr_challenge=payload["qr_challenge"],
+        qr_issued_at=_aware(payload["qr_issued_at"]).isoformat(),
+        qr_expires_at=_aware(payload["qr_expires_at"]).isoformat(),
+        qr_signature=payload["qr_signature"],
         qr_captured_at=captured_at.isoformat(),
         claim_created_at=created_at.isoformat(),
         claim_expires_at=expires_at.isoformat(),
@@ -791,10 +838,11 @@ def _ensure_claim_for_proof(conn, payload: dict, public_key: str, session: dict)
         """
         INSERT INTO attendance_claims (
             claim_id, attendance_session_id, student_id, device_registration_id,
-            qr_epoch, qr_challenge, qr_captured_at, claim_created_at,
+            qr_epoch, qr_challenge, qr_issued_at, qr_expires_at,
+            qr_signature, qr_captured_at, claim_created_at,
             claim_expires_at, claim_state, device_signature
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'PROOF_READY', %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PROOF_READY', %s)
         ON CONFLICT (attendance_session_id, student_id)
         DO UPDATE SET claim_state = CASE
               WHEN attendance_claims.claim_state = 'CONSUMED' THEN 'CONSUMED'::attendance_claim_state
@@ -809,12 +857,61 @@ def _ensure_claim_for_proof(conn, payload: dict, public_key: str, session: dict)
             payload["device_registration_id"],
             payload["qr_epoch"],
             payload["qr_challenge"],
+            payload["qr_issued_at"],
+            payload["qr_expires_at"],
+            payload["qr_signature"],
             payload["qr_captured_at"],
             payload["claim_created_at"],
             payload["claim_expires_at"],
             payload["device_signature"],
         ],
     )
+
+
+def _validate_signed_qr_evidence(conn, payload: dict, session: dict) -> None:
+    """Validate the server-issued QR, not merely a device-signed copy of it."""
+    issued_at = _aware(payload["qr_issued_at"])
+    expires_at = _aware(payload["qr_expires_at"])
+    captured_at = _aware(payload["qr_captured_at"])
+    authorization = _authorization_for_session(conn, payload["session_id"], include_private=False)
+    if authorization is None:
+        raise ApiError("SESSION_AUTHORIZATION_NOT_FOUND", "Session authorization is missing.", 404)
+    if authorization["key_id"] != session.get("key_id", authorization["key_id"]):
+        raise ApiError("QR_KEY_MISMATCH", "QR signing key does not match this session.", 400)
+    if expires_at <= issued_at or expires_at - issued_at > timedelta(seconds=QR_EPOCH_SECONDS):
+        raise ApiError("QR_EXPIRED", "QR validity window is invalid.", 409)
+    if not (issued_at - timedelta(seconds=CLOCK_SKEW_SECONDS) <= captured_at <= expires_at + timedelta(seconds=CLOCK_SKEW_SECONDS)):
+        raise ApiError("QR_EXPIRED", "QR was not captured during its signed validity window.", 409)
+    expected_epoch = epoch_for(issued_at, _aware(session["started_at"]))
+    expected_issued_at, expected_expires_at = epoch_window(_aware(session["started_at"]), expected_epoch)
+    expected_challenge = _qr_challenge(session["id"], expected_epoch, authorization["session_public_key"])
+    if (
+        payload["qr_epoch"] != expected_epoch
+        or issued_at != expected_issued_at
+        or expires_at != expected_expires_at
+        or payload["qr_challenge"] != expected_challenge
+    ):
+        raise ApiError("QR_TAMPERED", "QR evidence does not match the issued epoch.", 400)
+    canonical = canonical_attendance_qr(
+        session_id=session["id"],
+        epoch=payload["qr_epoch"],
+        issued_at=issued_at.isoformat(),
+        expires_at=expires_at.isoformat(),
+        challenge=payload["qr_challenge"],
+        key_id=authorization["key_id"],
+    )
+    if not verify(authorization["session_public_key"], canonical, payload["qr_signature"]):
+        raise ApiError("INVALID_QR_SIGNATURE", "QR signature could not be verified.", 400)
+
+
+def _ensure_device_was_valid_at_capture(device: dict, claim_payload: dict) -> None:
+    if device["status"] == "ACTIVE":
+        return
+    revoked_at = device.get("revoked_at")
+    qr_expires_at = _aware(claim_payload["qr_expires_at"])
+    if device["status"] == "REVOKED" and revoked_at is not None and qr_expires_at < _aware(revoked_at):
+        return
+    raise ApiError("DEVICE_REVOKED", "Attendance device was not valid when this QR was scanned.", 403)
 
 
 def _verify_presence_and_proof_signatures(public_key: str, challenge: dict, response: dict, proof: dict) -> None:
@@ -986,7 +1083,8 @@ def _session_by_id(conn, session_id: UUID) -> dict:
         SELECT sess.id, sess.course_offering_id, sess.created_by_faculty_id,
                c.code AS course_code, c.name AS course_name, sec.code AS section_code,
                te.room, sess.scheduled_start, sess.scheduled_end, sess.started_at,
-               sess.closed_at, sess.state::text AS state
+               sess.closed_at, sess.reconcile_until, sess.reconciliation_state,
+               sess.state::text AS state
         FROM attendance_sessions sess
         JOIN course_offerings co ON co.id = sess.course_offering_id
         JOIN courses c ON c.id = co.course_id

@@ -161,7 +161,7 @@ class Goal04AttendanceApiTest(unittest.TestCase):
         qr = self.client.get(f"/api/v1/faculty/attendance-sessions/{session['id']}/qr")
 
         self.assertEqual(close.status_code, 200)
-        self.assertEqual(close.json()["state"], "CLOSED")
+        self.assertEqual(close.json()["state"], "SYNCING")
         self.assertEqual(qr.status_code, 409)
         self.assertEqual(qr.json()["error"]["code"], "SESSION_CLOSED")
 

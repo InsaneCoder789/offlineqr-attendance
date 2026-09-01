@@ -151,7 +151,7 @@ def bootstrap_student_sync(student_id: UUID) -> dict:
         JOIN attendance_session_roster roster ON roster.attendance_session_id = sess.id
         WHERE roster.student_id = %s
           AND sess.course_offering_id = ANY(%s)
-          AND sess.state = 'CLOSED'
+          AND sess.state IN ('SYNCING', 'RECONCILED')
         ORDER BY sess.scheduled_start, sess.id
         """,
         [student_id, offering_ids],
@@ -162,7 +162,7 @@ def bootstrap_student_sync(student_id: UUID) -> dict:
                ar.method::text AS method, ar.recorded_at
         FROM attendance_records ar
         JOIN attendance_sessions sess ON sess.id = ar.attendance_session_id
-        WHERE ar.student_id = %s AND sess.state = 'CLOSED'
+        WHERE ar.student_id = %s AND sess.state IN ('SYNCING', 'RECONCILED')
         ORDER BY ar.recorded_at, ar.id
         """,
         [student_id],
@@ -177,7 +177,7 @@ def bootstrap_student_sync(student_id: UUID) -> dict:
         JOIN attendance_sessions sess ON sess.id = ar.attendance_session_id
         JOIN course_offerings co ON co.id = sess.course_offering_id
         JOIN courses c ON c.id = co.course_id
-        WHERE ar.student_id = %s AND sess.state = 'CLOSED'
+        WHERE ar.student_id = %s AND sess.state IN ('SYNCING', 'RECONCILED')
         GROUP BY c.id, c.code, c.name
         ORDER BY c.code
         """,

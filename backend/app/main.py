@@ -32,6 +32,7 @@ from .attendance_service import (
     faculty_courses,
     faculty_register,
     faculty_roster,
+    finalize_reconciliation,
     faculty_session_history,
     get_faculty_session,
     qr_payload_for,
@@ -43,7 +44,7 @@ from .attendance_service import (
     today_faculty_classes,
     trust_root,
 )
-from .config import get_settings
+from .config import get_settings, validate_production_settings
 from .device_schemas import (
     DeviceChallengeOut,
     DeviceRegistrationOut,
@@ -67,6 +68,7 @@ from .device_service import (
 )
 from .errors import ApiError, api_error_handler
 from .repositories import bootstrap_student_sync, get_faculty_by_identity, get_student, get_student_by_email
+from .security import SecurityHeadersMiddleware, SlidingWindowRateLimitMiddleware, require_ict_approval
 from .schemas import (
     AttendanceRecordOut,
     AttendanceSummaryOut,
@@ -77,7 +79,10 @@ from .schemas import (
 )
 
 app = FastAPI(title="KIIT Attendance Goal 02 API", version="0.2.0")
+validate_production_settings()
 app.add_exception_handler(ApiError, api_error_handler)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(SlidingWindowRateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -230,6 +235,11 @@ def faculty_close_session(session_id: UUID, request: Request) -> dict:
     return close_attendance_session(_faculty_id_from_request(request), session_id)
 
 
+@app.post("/api/v1/faculty/attendance-sessions/{session_id}/reconcile", response_model=FacultySessionOut)
+def faculty_reconcile_session(session_id: UUID, request: Request) -> dict:
+    return finalize_reconciliation(_faculty_id_from_request(request), session_id)
+
+
 @app.get("/api/v1/faculty/attendance-sessions/{session_id}/roster", response_model=list[RosterStudentOut])
 def faculty_session_roster(session_id: UUID, request: Request) -> list[dict]:
     return faculty_roster(_faculty_id_from_request(request), session_id)
@@ -355,8 +365,7 @@ def device_replacement_current(request: Request) -> dict | None:
     "/api/v1/devices/replacement-requests/{request_id}/approve",
     response_model=ReplacementRequestOut,
 )
-def device_replacement_approve(request_id: UUID) -> dict:
-    settings = get_settings()
-    if not settings.development_enabled:
-        raise ApiError("DEV_IDENTITY_DISABLED", "Development identity is disabled.", 403)
-    return approve_replacement(request_id=request_id, approved_by="development-admin")
+def device_replacement_approve(request_id: UUID, request: Request) -> dict:
+    require_ict_approval(request)
+    approver = request.headers.get("x-ict-operator", "ict-admin")
+    return approve_replacement(request_id=request_id, approved_by=approver)

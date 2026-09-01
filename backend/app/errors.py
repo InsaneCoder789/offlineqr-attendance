@@ -10,7 +10,7 @@ class ApiError(Exception):
 
 
 async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
-    correlation_id = request.headers.get("x-correlation-id", "development")
+    correlation_id = getattr(request.state, "correlation_id", None) or request.headers.get("x-correlation-id", "development")
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -21,4 +21,3 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
             }
         },
     )
-

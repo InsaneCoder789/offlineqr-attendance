@@ -7,7 +7,7 @@ import 'package:sqlite3/sqlite3.dart';
 import '../sync/bootstrap_models.dart';
 import '../../features/attendance/attendance_math.dart';
 
-const int localSchemaVersion = 4;
+const int localSchemaVersion = 5;
 
 class StudentProfile {
   const StudentProfile({
@@ -137,6 +137,9 @@ class AttendanceClaimProjection {
     required this.deviceRegistrationId,
     required this.qrEpoch,
     required this.qrChallenge,
+    required this.qrIssuedAt,
+    required this.qrExpiresAt,
+    required this.qrSignature,
     required this.qrCapturedAt,
     required this.claimCreatedAt,
     required this.claimExpiresAt,
@@ -150,6 +153,9 @@ class AttendanceClaimProjection {
   final String deviceRegistrationId;
   final int qrEpoch;
   final String qrChallenge;
+  final String qrIssuedAt;
+  final String qrExpiresAt;
+  final String qrSignature;
   final String qrCapturedAt;
   final String claimCreatedAt;
   final String claimExpiresAt;
@@ -262,6 +268,10 @@ class LocalAttendanceDatabase {
     if (_db.userVersion < 4) {
       _applySchemaV4();
       _db.userVersion = 4;
+    }
+    if (_db.userVersion < 5) {
+      _applySchemaV5();
+      _db.userVersion = 5;
     }
   }
 
@@ -759,10 +769,11 @@ class LocalAttendanceDatabase {
       '''
       INSERT INTO attendance_claims (
         claim_id, session_id, student_id, device_registration_id, qr_epoch,
-        qr_challenge, qr_captured_at, claim_created_at, claim_expires_at,
-        claim_state, device_signature
+        qr_challenge, qr_issued_at, qr_expires_at, qr_signature,
+        qr_captured_at, claim_created_at, claim_expires_at, claim_state,
+        device_signature
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (session_id, student_id)
       DO UPDATE SET claim_state = excluded.claim_state
       ''',
@@ -773,6 +784,9 @@ class LocalAttendanceDatabase {
         claim.deviceRegistrationId,
         claim.qrEpoch,
         claim.qrChallenge,
+        claim.qrIssuedAt,
+        claim.qrExpiresAt,
+        claim.qrSignature,
         claim.qrCapturedAt,
         claim.claimCreatedAt,
         claim.claimExpiresAt,
@@ -787,8 +801,9 @@ class LocalAttendanceDatabase {
     final rows = _db.select(
       '''
       SELECT claim_id, session_id, student_id, device_registration_id, qr_epoch,
-             qr_challenge, qr_captured_at, claim_created_at, claim_expires_at,
-             claim_state, device_signature
+             qr_challenge, qr_issued_at, qr_expires_at, qr_signature,
+             qr_captured_at, claim_created_at, claim_expires_at, claim_state,
+             device_signature
       FROM attendance_claims
       WHERE session_id = ? AND student_id = ?
       LIMIT 1
@@ -806,6 +821,9 @@ class LocalAttendanceDatabase {
       deviceRegistrationId: row['device_registration_id'] as String,
       qrEpoch: row['qr_epoch'] as int,
       qrChallenge: row['qr_challenge'] as String,
+      qrIssuedAt: row['qr_issued_at'] as String,
+      qrExpiresAt: row['qr_expires_at'] as String,
+      qrSignature: row['qr_signature'] as String,
       qrCapturedAt: row['qr_captured_at'] as String,
       claimCreatedAt: row['claim_created_at'] as String,
       claimExpiresAt: row['claim_expires_at'] as String,
@@ -1413,6 +1431,18 @@ class LocalAttendanceDatabase {
         ON attendance_proof_outbox(state, next_attempt_at, created_at);
       CREATE INDEX idx_local_proofs_session_student
         ON attendance_proofs_local(session_id, student_id);
+    ''');
+  }
+
+  void _applySchemaV5() {
+    _db.execute('''
+      ALTER TABLE attendance_claims ADD COLUMN qr_issued_at TEXT;
+      ALTER TABLE attendance_claims ADD COLUMN qr_expires_at TEXT;
+      ALTER TABLE attendance_claims ADD COLUMN qr_signature TEXT;
+      UPDATE attendance_claims
+      SET qr_issued_at = COALESCE(qr_issued_at, qr_captured_at),
+          qr_expires_at = COALESCE(qr_expires_at, claim_expires_at),
+          qr_signature = COALESCE(qr_signature, 'legacy-unverified');
     ''');
   }
 }

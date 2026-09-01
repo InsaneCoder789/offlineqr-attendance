@@ -14,7 +14,7 @@ class BootstrapApiTest(unittest.TestCase):
     def test_me_uses_development_student(self) -> None:
         response = self.client.get("/api/v1/me")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["roll_number"], "22053389")
+        self.assertEqual(response.json()["roll_number"], "DEV24155001")
 
     def test_bootstrap_sync_contract(self) -> None:
         response = self.client.get("/api/v1/sync/bootstrap")
@@ -22,7 +22,7 @@ class BootstrapApiTest(unittest.TestCase):
         payload = response.json()
 
         self.assertEqual(payload["sync_version"], 1)
-        self.assertEqual(payload["student"]["roll_number"], "22053389")
+        self.assertEqual(payload["student"]["roll_number"], "DEV24155001")
         self.assertGreaterEqual(len(payload["courses"]), 4)
         self.assertEqual(len(payload["attendance_records"]), 0)
         self.assertTrue(payload["cursor"].startswith("goal02:"))
@@ -30,16 +30,16 @@ class BootstrapApiTest(unittest.TestCase):
         exposed_rolls = {
             payload["student"]["roll_number"],
         }
-        self.assertEqual(exposed_rolls, {"22053389"})
+        self.assertEqual(exposed_rolls, {"DEV24155001"})
 
     def test_dev_login_resolves_kiit_email_to_student_projection(self) -> None:
         response = self.client.post(
             "/api/v1/auth/dev-login",
-            json={"email": "24155866@kiit.ac.in"},
+            json={"email": "dev24155001@kiit.ac.in"},
         )
 
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json()["student"]["roll_number"], "24155866")
+        self.assertEqual(response.json()["student"]["roll_number"], "DEV24155001")
         self.assertGreater(len(response.json()["enrollments"]), 0)
 
     def test_absent_record_has_no_method(self) -> None:

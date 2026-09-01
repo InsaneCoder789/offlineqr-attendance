@@ -16,22 +16,22 @@ VALUES
 
 INSERT INTO faculty (id, employee_code, institutional_email, display_name)
 VALUES
-('40000000-0000-4000-8000-000000000001', 'DEVFAC001', 'ananya.sen@example.edu', 'Dr. Ananya Sen'),
-('40000000-0000-4000-8000-000000000002', 'DEVFAC002', 'vikram.rao@example.edu', 'Prof. Vikram Rao'),
-('40000000-0000-4000-8000-000000000003', 'DEVFAC003', 'meera.nair@example.edu', 'Dr. Meera Nair');
+('40000000-0000-4000-8000-000000000001', 'DEVFAC001', 'ananya.sen@kiit.ac.in', 'Dr. Ananya Sen'),
+('40000000-0000-4000-8000-000000000002', 'DEVFAC002', 'vikram.rao@kiit.ac.in', 'Prof. Vikram Rao'),
+('40000000-0000-4000-8000-000000000003', 'DEVFAC003', 'meera.nair@kiit.ac.in', 'Dr. Meera Nair');
 
 INSERT INTO students (id, roll_number, institutional_email, display_name)
 VALUES
-('50000000-0000-4000-8000-000000000001', 'DEV24155001', 'dev24155001@example.edu', 'Aarav Mehta'),
-('50000000-0000-4000-8000-000000000002', 'DEV24155002', 'dev24155002@example.edu', 'Diya Sharma'),
-('50000000-0000-4000-8000-000000000003', 'DEV24155003', 'dev24155003@example.edu', 'Kabir Iyer'),
-('50000000-0000-4000-8000-000000000004', 'DEV24155004', 'dev24155004@example.edu', 'Nisha Kapoor'),
-('50000000-0000-4000-8000-000000000005', 'DEV24155005', 'dev24155005@example.edu', 'Ishaan Bose'),
-('50000000-0000-4000-8000-000000000006', 'DEV24155006', 'dev24155006@example.edu', 'Tara Menon'),
-('50000000-0000-4000-8000-000000000007', 'DEV24155007', 'dev24155007@example.edu', 'Riya Kulkarni'),
-('50000000-0000-4000-8000-000000000008', 'DEV24155008', 'dev24155008@example.edu', 'Neel Das'),
-('50000000-0000-4000-8000-000000000009', 'DEV24155009', 'dev24155009@example.edu', 'Sana Qureshi'),
-('50000000-0000-4000-8000-000000000010', 'DEV24155010', 'dev24155010@example.edu', 'Arjun Pillai');
+('50000000-0000-4000-8000-000000000001', 'DEV24155001', 'dev24155001@kiit.ac.in', 'Aarav Mehta'),
+('50000000-0000-4000-8000-000000000002', 'DEV24155002', 'dev24155002@kiit.ac.in', 'Diya Sharma'),
+('50000000-0000-4000-8000-000000000003', 'DEV24155003', 'dev24155003@kiit.ac.in', 'Kabir Iyer'),
+('50000000-0000-4000-8000-000000000004', 'DEV24155004', 'dev24155004@kiit.ac.in', 'Nisha Kapoor'),
+('50000000-0000-4000-8000-000000000005', 'DEV24155005', 'dev24155005@kiit.ac.in', 'Ishaan Bose'),
+('50000000-0000-4000-8000-000000000006', 'DEV24155006', 'dev24155006@kiit.ac.in', 'Tara Menon'),
+('50000000-0000-4000-8000-000000000007', 'DEV24155007', 'dev24155007@kiit.ac.in', 'Riya Kulkarni'),
+('50000000-0000-4000-8000-000000000008', 'DEV24155008', 'dev24155008@kiit.ac.in', 'Neel Das'),
+('50000000-0000-4000-8000-000000000009', 'DEV24155009', 'dev24155009@kiit.ac.in', 'Sana Qureshi'),
+('50000000-0000-4000-8000-000000000010', 'DEV24155010', 'dev24155010@kiit.ac.in', 'Arjun Pillai');
 
 INSERT INTO course_offerings (id, course_id, academic_term_id, section_id)
 VALUES

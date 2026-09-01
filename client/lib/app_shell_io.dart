@@ -160,7 +160,10 @@ class _DevelopmentDashboardShellState extends State<DevelopmentDashboardShell>
 
   void _startSyncPolling() {
     if (syncPoller != null || !loggedIn) return;
-    syncPoller = Timer.periodic(const Duration(seconds: 8), (_) {
+    // Foreground polling makes captured proofs the first work attempted as
+    // soon as the backend becomes reachable again. The outbox backoff still
+    // protects the server during a real outage.
+    syncPoller = Timer.periodic(const Duration(seconds: 5), (_) {
       if (!mounted || syncing || !loggedIn) return;
       _syncInternal(forceProofSync: true);
     });

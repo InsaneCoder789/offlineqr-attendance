@@ -85,6 +85,29 @@ class Goal07SyncReconciliationTest(unittest.TestCase):
         self.assertEqual(results[1]["result"], "REJECTED")
         self.assertEqual(results[1]["error_code"], "UNSUPPORTED_PROTOCOL")
 
+    def test_tampered_qr_evidence_is_rejected_before_attendance_is_written(self) -> None:
+        submission = self._submission()
+        submission["claim"]["qr_challenge"] = "tampered-challenge"
+
+        response = self.client.post("/api/v1/attendance/proofs", json=submission)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["result"], "REJECTED")
+        self.assertIn(response.json()["error_code"], {"QR_TAMPERED", "INVALID_QR_SIGNATURE"})
+
+    def test_proof_scanned_before_close_reconciles_during_sync_window(self) -> None:
+        submission = self._submission()
+        closed = self.client.post(
+            f"/api/v1/faculty/attendance-sessions/{submission['proof']['session_id']}/close",
+            headers={"x-faculty-id": str(self._student_today_faculty_and_offering()[0])},
+        )
+        response = self.client.post("/api/v1/attendance/proofs", json=submission)
+
+        self.assertEqual(closed.status_code, 200, closed.text)
+        self.assertEqual(closed.json()["state"], "SYNCING")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["result"], "ACCEPTED")
+
     def _submission(self) -> dict:
         faculty_id, offering_id = self._student_today_faculty_and_offering()
         session = start_attendance_session(faculty_id, offering_id)
@@ -100,6 +123,9 @@ class Goal07SyncReconciliationTest(unittest.TestCase):
             device_registration_id=self.device_id,
             qr_epoch=qr["epoch"],
             qr_challenge=qr["challenge"],
+            qr_issued_at=qr["issued_at"].isoformat(),
+            qr_expires_at=qr["expires_at"].isoformat(),
+            qr_signature=qr["signature"],
             qr_captured_at=captured_at.isoformat(),
             claim_created_at=claim_created_at.isoformat(),
             claim_expires_at=claim_expires_at.isoformat(),
@@ -142,6 +168,9 @@ class Goal07SyncReconciliationTest(unittest.TestCase):
                 "device_registration_id": str(self.device_id),
                 "qr_epoch": qr["epoch"],
                 "qr_challenge": qr["challenge"],
+                "qr_issued_at": qr["issued_at"].isoformat(),
+                "qr_expires_at": qr["expires_at"].isoformat(),
+                "qr_signature": qr["signature"],
                 "qr_captured_at": captured_at.isoformat(),
                 "claim_created_at": claim_created_at.isoformat(),
                 "claim_expires_at": claim_expires_at.isoformat(),

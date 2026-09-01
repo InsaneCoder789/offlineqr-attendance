@@ -224,7 +224,9 @@ export async function fetchRoster(sessionId: string): Promise<RosterStudent[]> {
   const response = await fetch(`${API_BASE}/api/v1/faculty/attendance-sessions/${sessionId}/roster`, {
     headers: facultyHeaders(),
   });
-  if (!response.ok) return [];
+  if (!response.ok) {
+    throw new Error(`Roster request failed with ${response.status}`);
+  }
   return (await response.json()) as RosterStudent[];
 }
 
