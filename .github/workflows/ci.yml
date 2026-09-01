@@ -25,6 +25,8 @@ jobs:
           --health-retries 12
     env:
       DATABASE_URL: postgresql://postgres@localhost/kiit_attendance_goal02
+      PGHOST: localhost
+      PGUSER: postgres
       APP_ENV: development
     steps:
       - uses: actions/checkout@v4
