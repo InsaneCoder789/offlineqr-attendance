@@ -90,6 +90,7 @@ jobs:
           tags: offlineqr/backend:ci
       - uses: docker/build-push-action@v6
         with:
-          context: faculty-portal
+          context: .
+          file: faculty-portal/Dockerfile
           push: false
           tags: offlineqr/faculty-portal:ci

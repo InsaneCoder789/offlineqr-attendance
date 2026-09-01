@@ -1,0 +1,7 @@
+*
+!faculty-portal/
+!faculty-portal/**
+!shared/
+!shared/**
+faculty-portal/node_modules
+faculty-portal/.next
