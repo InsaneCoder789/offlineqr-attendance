@@ -24,8 +24,9 @@ class DeviceProfileIn(BaseModel):
 class DeviceChallengeOut(BaseModel):
     challenge_id: UUID
     challenge: str
-    issued_at: datetime
-    expires_at: datetime
+    # Protocol values, not presentation dates. These exact UTC strings are signed.
+    issued_at: str
+    expires_at: str
     canonical_version: str
 
 

@@ -15,6 +15,7 @@ from .device_crypto import (
     SUPPORTED_ALGORITHM,
     b64url_encode,
     canonical_enrollment_payload,
+    canonical_timestamp,
     canonical_verification_payload,
     public_key_fingerprint,
     verify_signature,
@@ -93,7 +94,7 @@ def complete_enrollment(
                 student_id=student_id,
                 challenge_id=challenge_id,
                 challenge=challenge["challenge"],
-                issued_at=challenge["issued_at"].isoformat(),
+                issued_at=canonical_timestamp(challenge["issued_at"]),
                 public_key_fingerprint_value=fingerprint,
             )
             if not verify_signature(
@@ -231,7 +232,7 @@ def complete_verification(
                 device_registration_id=device_registration_id,
                 challenge_id=challenge_id,
                 challenge=challenge["challenge"],
-                issued_at=challenge["issued_at"].isoformat(),
+                issued_at=canonical_timestamp(challenge["issued_at"]),
                 public_key_fingerprint_value=device["key_fingerprint"],
             )
             verified = verify_signature(
@@ -304,7 +305,7 @@ def request_replacement(
                 student_id=student_id,
                 challenge_id=challenge_id,
                 challenge=challenge["challenge"],
-                issued_at=challenge["issued_at"].isoformat(),
+                issued_at=canonical_timestamp(challenge["issued_at"]),
                 public_key_fingerprint_value=fingerprint,
             )
             if not verify_signature(
@@ -585,7 +586,12 @@ def _create_challenge(
             {"purpose": purpose},
         )
         conn.commit()
-        return {**dict(row), "canonical_version": f"DEVICE_{purpose}_V1"}
+        return {
+            **dict(row),
+            "issued_at": canonical_timestamp(row["issued_at"]),
+            "expires_at": canonical_timestamp(row["expires_at"]),
+            "canonical_version": f"DEVICE_{purpose}_V1",
+        }
 
 
 def _consume_challenge(

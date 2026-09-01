@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+from datetime import UTC, datetime
 from uuid import UUID
 
 from nacl.exceptions import BadSignatureError
@@ -9,6 +10,11 @@ from nacl.signing import VerifyKey
 
 
 SUPPORTED_ALGORITHM = "Ed25519"
+
+
+def canonical_timestamp(value: datetime) -> str:
+    """Serialize protocol timestamps exactly as they are sent to clients."""
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 def b64url_encode(value: bytes) -> str:
@@ -83,4 +89,3 @@ def verify_signature(
         return True
     except (BadSignatureError, ValueError):
         return False
-

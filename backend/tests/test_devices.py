@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 import unittest
 from uuid import UUID
@@ -14,6 +15,7 @@ from backend.app.config import get_settings
 from backend.app.device_crypto import (
     b64url_encode,
     canonical_enrollment_payload,
+    canonical_timestamp,
     canonical_verification_payload,
     public_key_fingerprint,
     verify_signature,
@@ -246,6 +248,16 @@ class DeviceApiTest(unittest.TestCase):
                 signature_b64url=vector["signature"],
             )
         )
+
+    def test_utc_timestamp_has_one_canonical_representation(self) -> None:
+        self.assertEqual(
+            canonical_timestamp(datetime(2026, 9, 1, 10, 40, 52, tzinfo=UTC)),
+            "2026-09-01T10:40:52Z",
+        )
+
+    def test_challenge_exposes_the_timestamp_that_the_server_verifies(self) -> None:
+        challenge = self.client.post("/api/v1/devices/enrollment/challenge").json()
+        self.assertTrue(challenge["issued_at"].endswith("Z"))
 
     def _enroll(self, seed_byte: int) -> dict:
         response = self._enroll_response(seed_byte)
