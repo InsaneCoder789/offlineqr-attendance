@@ -9,7 +9,11 @@ class Settings:
     dev_student_id: str
     dev_faculty_id: str
     institution_signing_seed_b64url: str
-    ict_admin_approval_key: str
+    redis_url: str
+    redis_required: bool
+    faculty_session_ttl_seconds: int
+    faculty_cookie_secure: bool
+    cors_allowed_origins: tuple[str, ...]
 
     @property
     def development_enabled(self) -> bool:
@@ -17,6 +21,11 @@ class Settings:
 
 
 def get_settings() -> Settings:
+    configured_origins = tuple(
+        origin.strip()
+        for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
+        if origin.strip()
+    )
     return Settings(
         database_url=os.environ.get(
             "DATABASE_URL",
@@ -35,10 +44,13 @@ def get_settings() -> Settings:
             "INSTITUTION_SIGNING_SEED_B64URL",
             "ERERERERERERERERERERERERERERERERERERERERERE",
         ),
-        ict_admin_approval_key=os.environ.get(
-            "ICT_ADMIN_APPROVAL_KEY",
-            "development-ict-approval-key-change-me",
-        ),
+        redis_url=os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0"),
+        redis_required=os.environ.get("REDIS_REQUIRED", "").lower() in {"1", "true", "yes"}
+        or os.environ.get("APP_ENV", "development") != "development",
+        faculty_session_ttl_seconds=int(os.environ.get("FACULTY_SESSION_TTL_SECONDS", "28800")),
+        faculty_cookie_secure=os.environ.get("FACULTY_COOKIE_SECURE", "").lower() in {"1", "true", "yes"}
+        or os.environ.get("APP_ENV", "development") != "development",
+        cors_allowed_origins=configured_origins,
     )
 
 
@@ -49,5 +61,11 @@ def validate_production_settings() -> None:
         return
     if settings.institution_signing_seed_b64url == "ERERERERERERERERERERERERERERERERERERERERERE":
         raise RuntimeError("INSTITUTION_SIGNING_SEED_B64URL must be set outside development")
-    if len(settings.ict_admin_approval_key) < 32:
-        raise RuntimeError("ICT_ADMIN_APPROVAL_KEY must be at least 32 characters outside development")
+    if not settings.redis_required:
+        raise RuntimeError("REDIS_REQUIRED must remain enabled outside development")
+    if not settings.redis_url.startswith(("redis://", "rediss://")):
+        raise RuntimeError("REDIS_URL must use redis:// or rediss:// outside development")
+    if not settings.faculty_cookie_secure:
+        raise RuntimeError("FACULTY_COOKIE_SECURE must remain enabled outside development")
+    if not settings.cors_allowed_origins:
+        raise RuntimeError("CORS_ALLOWED_ORIGINS must list the deployed faculty portal origins outside development")

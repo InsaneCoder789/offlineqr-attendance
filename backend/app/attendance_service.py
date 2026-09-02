@@ -123,7 +123,7 @@ def start_attendance_session(faculty_id: UUID, course_offering_id: UUID) -> dict
             scheduled_end = _combine(current, entry["end_time"])
             existing = conn.execute(
                 """
-                SELECT id FROM attendance_sessions
+                SELECT id, state::text AS state FROM attendance_sessions
                 WHERE course_offering_id = %s
                   AND scheduled_start = %s
                   AND state IN ('CREATED', 'ACTIVE', 'SYNCING')
@@ -132,20 +132,37 @@ def start_attendance_session(faculty_id: UUID, course_offering_id: UUID) -> dict
                 [course_offering_id, scheduled_start],
             ).fetchone()
             if existing is None:
-                session_id = conn.execute(
+                created = conn.execute(
                     """
                     INSERT INTO attendance_sessions (
                         course_offering_id, created_by_faculty_id, scheduled_start,
                         scheduled_end, started_at, state
                     )
                     VALUES (%s, %s, %s, %s, %s, 'ACTIVE')
+                    ON CONFLICT DO NOTHING
                     RETURNING id
                     """,
                     [course_offering_id, faculty_id, scheduled_start, scheduled_end, now],
-                ).fetchone()["id"]
-                _snapshot_roster(conn, session_id)
+                ).fetchone()
+                if created is not None:
+                    session_id = created["id"]
+                    _snapshot_roster(conn, session_id)
+                else:
+                    existing = conn.execute(
+                        """
+                        SELECT id, state::text AS state FROM attendance_sessions
+                        WHERE course_offering_id = %s AND scheduled_start = %s
+                          AND state IN ('CREATED', 'ACTIVE', 'SYNCING')
+                        ORDER BY created_at DESC LIMIT 1
+                        """,
+                        [course_offering_id, scheduled_start],
+                    ).fetchone()
+                    if existing is None:
+                        raise ApiError("SESSION_START_CONFLICT", "Attendance session start conflicted. Retry once.", 409)
+                    session_id = existing["id"]
             else:
                 session_id = existing["id"]
+            if existing is not None:
                 conn.execute(
                     """
                     UPDATE attendance_sessions

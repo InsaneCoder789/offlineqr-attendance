@@ -1,6 +1,6 @@
 import type { SessionAuthorization } from "./protocol";
 
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_ATTENDANCE_API_BASE ?? "http://127.0.0.1:8000";
 
 export type FacultyClass = {
   course_offering_id: string;
@@ -18,6 +18,12 @@ export type FacultyIdentity = {
   employee_code: string | null;
   institutional_email: string;
   display_name: string;
+  phone_number: string | null;
+  designation: string | null;
+  org_unit: string | null;
+  must_change_password: boolean;
+  password_changed_at: string | null;
+  last_login_at: string | null;
 };
 
 export type FacultySession = {
@@ -104,27 +110,79 @@ export function clearFacultyIdentity(): void {
   localStorage.removeItem("faculty.activeSession");
 }
 
+function csrfToken(): string {
+  const token = document.cookie
+    .split("; ")
+    .find((item) => item.startsWith("kiit_faculty_csrf="))
+    ?.split("=")[1];
+  return token ? decodeURIComponent(token) : "";
+}
+
+function apiHeaders(mutating = false, contentType = false): HeadersInit {
+  const headers: Record<string, string> = {};
+  if (contentType) headers["Content-Type"] = "application/json";
+  if (mutating) {
+    const csrf = csrfToken();
+    if (csrf) headers["X-CSRF-Token"] = csrf;
+  }
+  return headers;
+}
+
+async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(`${API_BASE}${path}`, {
+    ...init,
+    credentials: "include",
+    headers: { ...apiHeaders(Boolean(init.method && init.method !== "GET" && init.method !== "HEAD"), Boolean(init.body)), ...init.headers },
+  });
+}
+
 export async function loginFaculty(email: string, password: string): Promise<FacultyIdentity> {
-  const response = await fetch(`${API_BASE}/api/v1/faculty/auth/login`, {
+  const response = await apiFetch("/api/v1/faculty/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
-  if (!response.ok) throw new Error("Faculty login failed");
+  if (!response.ok) throw new Error("Unable to sign in with those credentials");
   const profile = (await response.json()) as FacultyIdentity;
   saveFacultyIdentity(profile);
   return profile;
 }
 
-function facultyHeaders(): HeadersInit {
-  const faculty = cachedFacultyIdentity();
-  return faculty ? { "X-Faculty-Id": faculty.id } : {};
+export async function logoutFaculty(): Promise<void> {
+  await apiFetch("/api/v1/faculty/auth/logout", { method: "POST" });
+  clearFacultyIdentity();
+}
+
+export async function fetchFacultyProfile(): Promise<FacultyIdentity | null> {
+  const response = await apiFetch("/api/v1/faculty/profile");
+  if (response.status === 401) return null;
+  if (!response.ok) throw new Error("Could not restore the faculty session");
+  const profile = (await response.json()) as FacultyIdentity;
+  saveFacultyIdentity(profile);
+  return profile;
+}
+
+export async function updateFacultyProfile(displayName: string, phoneNumber: string | null): Promise<FacultyIdentity> {
+  const response = await apiFetch("/api/v1/faculty/profile", {
+    method: "PATCH",
+    body: JSON.stringify({ display_name: displayName, phone_number: phoneNumber }),
+  });
+  if (!response.ok) throw new Error("Could not update the faculty profile");
+  const profile = (await response.json()) as FacultyIdentity;
+  saveFacultyIdentity(profile);
+  return profile;
+}
+
+export async function changeFacultyPassword(currentPassword: string, newPassword: string): Promise<void> {
+  const response = await apiFetch("/api/v1/faculty/auth/password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  if (!response.ok) throw new Error("Could not change the password");
 }
 
 export async function fetchTodayClasses(): Promise<FacultyClass[]> {
-  const response = await fetch(`${API_BASE}/api/v1/faculty/classes/today`, {
-    headers: facultyHeaders(),
-  });
+  const response = await apiFetch("/api/v1/faculty/classes/today");
   if (!response.ok) throw new Error("Could not load today's classes");
   const classes = (await response.json()) as FacultyClass[];
   localStorage.setItem("faculty.todayClasses", JSON.stringify(classes));
@@ -136,9 +194,7 @@ export function cachedTodayClasses(): FacultyClass[] {
 }
 
 export async function fetchFacultyCourses(): Promise<FacultyCourse[]> {
-  const response = await fetch(`${API_BASE}/api/v1/faculty/courses`, {
-    headers: facultyHeaders(),
-  });
+  const response = await apiFetch("/api/v1/faculty/courses");
   if (!response.ok) throw new Error("Could not load assigned courses");
   const courses = (await response.json()) as FacultyCourse[];
   localStorage.setItem("faculty.courses", JSON.stringify(courses));
@@ -150,9 +206,7 @@ export function cachedFacultyCourses(): FacultyCourse[] {
 }
 
 export async function fetchSessionHistory(): Promise<FacultySessionRecord[]> {
-  const response = await fetch(`${API_BASE}/api/v1/faculty/attendance-sessions?limit=50`, {
-    headers: facultyHeaders(),
-  });
+  const response = await apiFetch("/api/v1/faculty/attendance-sessions?limit=50");
   if (!response.ok) throw new Error("Could not load attendance records");
   const records = (await response.json()) as FacultySessionRecord[];
   localStorage.setItem("faculty.sessionHistory", JSON.stringify(records));
@@ -164,9 +218,7 @@ export function cachedSessionHistory(): FacultySessionRecord[] {
 }
 
 export async function fetchFacultyRegister(courseOfferingId: string): Promise<FacultyRegister> {
-  const response = await fetch(`${API_BASE}/api/v1/faculty/course-offerings/${courseOfferingId}/register`, {
-    headers: facultyHeaders(),
-  });
+  const response = await apiFetch(`/api/v1/faculty/course-offerings/${courseOfferingId}/register`);
   if (!response.ok) throw new Error("Could not load attendance register");
   const register = (await response.json()) as FacultyRegister;
   localStorage.setItem(`faculty.register.${courseOfferingId}`, JSON.stringify(register));
@@ -180,9 +232,8 @@ export function cachedFacultyRegister(courseOfferingId: string | null): FacultyR
 }
 
 export async function startSession(courseOfferingId: string): Promise<FacultySession> {
-  const response = await fetch(`${API_BASE}/api/v1/faculty/attendance-sessions/start`, {
+  const response = await apiFetch("/api/v1/faculty/attendance-sessions/start", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...facultyHeaders() },
     body: JSON.stringify({ course_offering_id: courseOfferingId }),
   });
   if (!response.ok) throw new Error(await response.text());
@@ -201,9 +252,7 @@ export function clearCachedActiveSession(): void {
 }
 
 export async function fetchSession(sessionId: string): Promise<FacultySession | null> {
-  const response = await fetch(`${API_BASE}/api/v1/faculty/attendance-sessions/${sessionId}`, {
-    headers: facultyHeaders(),
-  });
+  const response = await apiFetch(`/api/v1/faculty/attendance-sessions/${sessionId}`);
   if (response.status === 404 || response.status === 403) return null;
   if (!response.ok) throw new Error("Could not verify active session");
   const verified = (await response.json()) as FacultySession;
@@ -212,18 +261,15 @@ export async function fetchSession(sessionId: string): Promise<FacultySession | 
 }
 
 export async function closeSession(sessionId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/v1/faculty/attendance-sessions/${sessionId}/close`, {
+  const response = await apiFetch(`/api/v1/faculty/attendance-sessions/${sessionId}/close`, {
     method: "POST",
-    headers: facultyHeaders(),
   });
   if (!response.ok) throw new Error("Could not close attendance session");
   localStorage.removeItem("faculty.activeSession");
 }
 
 export async function fetchRoster(sessionId: string): Promise<RosterStudent[]> {
-  const response = await fetch(`${API_BASE}/api/v1/faculty/attendance-sessions/${sessionId}/roster`, {
-    headers: facultyHeaders(),
-  });
+  const response = await apiFetch(`/api/v1/faculty/attendance-sessions/${sessionId}/roster`);
   if (!response.ok) {
     throw new Error(`Roster request failed with ${response.status}`);
   }
@@ -231,9 +277,9 @@ export async function fetchRoster(sessionId: string): Promise<RosterStudent[]> {
 }
 
 export async function attest(sessionId: string, studentId: string, reason: string): Promise<void> {
-  await fetch(`${API_BASE}/api/v1/faculty/attendance-sessions/${sessionId}/attest`, {
+  const response = await apiFetch(`/api/v1/faculty/attendance-sessions/${sessionId}/attest`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...facultyHeaders() },
     body: JSON.stringify({ student_id: studentId, reason }),
   });
+  if (!response.ok) throw new Error("Could not attest attendance");
 }

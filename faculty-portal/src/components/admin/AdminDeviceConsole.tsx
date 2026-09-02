@@ -5,17 +5,11 @@ import { useEffect, useState } from "react";
 import { adminApi, type AdminDevice, type AdminStats, type ReplacementRequest } from "../../admin-api";
 import { DeviceVisual } from "./DeviceVisual";
 
-const sessionKey = "offlineqr.ict.approval-key";
-const operatorKey = "offlineqr.ict.operator";
-
 function dateTime(value?: string | null) {
   return value ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "Not recorded";
 }
 
 export function AdminDeviceConsole() {
-  const [key, setKey] = useState("");
-  const [operator, setOperator] = useState("ict-admin");
-  const [ready, setReady] = useState(false);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [devices, setDevices] = useState<AdminDevice[]>([]);
   const [replacements, setReplacements] = useState<ReplacementRequest[]>([]);
@@ -24,25 +18,12 @@ export function AdminDeviceConsole() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const storedKey = sessionStorage.getItem(sessionKey);
-    const storedOperator = sessionStorage.getItem(operatorKey);
-    if (storedKey) {
-      setKey(storedKey);
-      setReady(true);
-    }
-    if (storedOperator) setOperator(storedOperator);
-  }, []);
-
   async function load() {
-    if (!key) return;
     setLoading(true);
     setError(null);
     try {
       const [nextStats, nextDevices, nextReplacements] = await Promise.all([
-        adminApi.stats(key, operator),
-        adminApi.devices(key, operator, query, status),
-        adminApi.replacements(key, operator),
+        adminApi.stats(), adminApi.devices(query, status), adminApi.replacements(),
       ]);
       setStats(nextStats);
       setDevices(nextDevices);
@@ -55,50 +36,27 @@ export function AdminDeviceConsole() {
   }
 
   useEffect(() => {
-    if (ready) void load();
-  // Initial console load deliberately runs only after a session credential exists.
+    void load();
+  // The server-owned faculty session determines access; no approval secret enters the browser.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
-
-  function beginSession(event: React.FormEvent) {
-    event.preventDefault();
-    sessionStorage.setItem(sessionKey, key);
-    sessionStorage.setItem(operatorKey, operator);
-    setReady(true);
-  }
+  }, []);
 
   async function decide(request: ReplacementRequest, action: "approve" | "reject") {
     const note = window.prompt(action === "approve" ? "Approval note" : "Rejection reason", "Identity and device profile reviewed.");
     if (!note || note.trim().length < 3) return;
     try {
-      await (action === "approve" ? adminApi.approve(key, operator, request.id, note.trim()) : adminApi.reject(key, operator, request.id, note.trim()));
+      await (action === "approve" ? adminApi.approve(request.id, note.trim()) : adminApi.reject(request.id, note.trim()));
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Decision could not be recorded.");
     }
   }
 
-  if (!ready) {
-    return (
-      <main className="admin-login-page">
-        <form className="admin-login-card" onSubmit={beginSession}>
-          <p className="eyeline">Institutional control centre</p>
-          <h1>Device Governance</h1>
-          <p>Review device binding, approve switches, revoke compromised devices, and preserve every decision as an audit event.</p>
-          <label>ICT operator<input value={operator} onChange={(event) => setOperator(event.target.value)} required /></label>
-          <label>ICT approval credential<input value={key} onChange={(event) => setKey(event.target.value)} type="password" autoComplete="off" required /></label>
-          <button type="submit">Open Device Console</button>
-          <small>The credential is held only for this browser session and is never written into the portal build.</small>
-        </form>
-      </main>
-    );
-  }
-
   return (
     <main className="admin-console">
       <header className="admin-header">
         <div><p className="eyeline">Institutional control centre</p><h1>Device Governance</h1><p>One student, one active credential, every switch reviewable.</p></div>
-        <div className="admin-header-actions"><span className="admin-operator">ICT: {operator}</span><button className="secondary" onClick={() => void load()} disabled={loading}>{loading ? "Refreshing" : "Refresh"}</button></div>
+        <div className="admin-header-actions"><span className="admin-operator">ICT administrator session</span><button className="secondary" onClick={() => void load()} disabled={loading}>{loading ? "Refreshing" : "Refresh"}</button></div>
       </header>
       {error ? <p className="admin-error" role="alert">{error}</p> : null}
       <section className="admin-stats" aria-label="Device governance summary">

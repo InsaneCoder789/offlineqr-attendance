@@ -13,13 +13,17 @@ import {
   clearFacultyIdentity,
   closeSession,
   fetchFacultyCourses,
+  fetchFacultyProfile,
   fetchFacultyRegister,
   fetchRoster,
   fetchSession,
   fetchSessionHistory,
   fetchTodayClasses,
   loginFaculty,
+  logoutFaculty,
   startSession,
+  changeFacultyPassword,
+  updateFacultyProfile,
   type FacultyClass,
   type FacultyCourse,
   type FacultyIdentity,
@@ -63,7 +67,9 @@ type FacultyPortalState = {
   setRegisterQuery: (value: string) => void;
   setRegisterDateFilter: (value: string) => void;
   submitFacultyLogin: () => Promise<void>;
-  switchFaculty: () => void;
+  switchFaculty: () => Promise<void>;
+  updateProfile: (displayName: string, phoneNumber: string | null) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   refresh: () => Promise<void>;
   refreshRegister: (courseOfferingId: string) => Promise<void>;
   start: (courseOfferingId: string) => Promise<boolean>;
@@ -73,7 +79,7 @@ type FacultyPortalState = {
 };
 
 const FacultyPortalContext = createContext<FacultyPortalState | null>(null);
-const defaultFacultyEmail = "dr.ajit.kumar.pasayat@kiit.ac.in";
+const defaultFacultyEmail = "";
 const defaultReason = "Student device failure";
 
 export function FacultyPortalProvider({ children }: { children: React.ReactNode }) {
@@ -86,7 +92,7 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
   const [roster, setRoster] = useState<RosterStudent[]>([]);
   const [facultyIdentity, setFacultyIdentity] = useState<FacultyIdentity | null>(null);
   const [loginEmail, setLoginEmail] = useState(defaultFacultyEmail);
-  const [loginPassword, setLoginPassword] = useState("admin");
+  const [loginPassword, setLoginPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -182,7 +188,12 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     }
   }, [loginEmail, loginPassword, refresh]);
 
-  const switchFaculty = useCallback(() => {
+  const switchFaculty = useCallback(async () => {
+    try {
+      await logoutFaculty();
+    } catch {
+      clearFacultyIdentity();
+    }
     clearFacultyIdentity();
     setFacultyIdentity(null);
     setClasses([]);
@@ -192,6 +203,34 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     setRegister(null);
     setSession(null);
     setRoster([]);
+  }, []);
+
+  const updateProfile = useCallback(async (displayName: string, phoneNumber: string | null) => {
+    setLoading(true);
+    setError(null);
+    try {
+      setFacultyIdentity(await updateFacultyProfile(displayName, phoneNumber));
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "Could not update profile");
+      throw exception;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await changeFacultyPassword(currentPassword, newPassword);
+      const profile = await fetchFacultyProfile();
+      if (profile) setFacultyIdentity(profile);
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "Could not change password");
+      throw exception;
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const refreshActiveSession = useCallback(async () => {
@@ -313,7 +352,20 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     const selected = defaultRegisterOfferingId(courses, cachedTodayClasses());
     setSelectedRegisterOfferingId(selected);
     setRegister(cachedFacultyRegister(selected));
-    if (identity) void refresh();
+    void (async () => {
+      try {
+        const verified = await fetchFacultyProfile();
+        if (!verified) {
+          clearFacultyIdentity();
+          setFacultyIdentity(null);
+          return;
+        }
+        setFacultyIdentity(verified);
+        await refresh();
+      } catch {
+        // Offline faculty access may display only cached workspace data.
+      }
+    })();
 
     return () => {
       window.removeEventListener("online", setOnlineState);
@@ -359,6 +411,8 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     setRegisterDateFilter,
     submitFacultyLogin,
     switchFaculty,
+    updateProfile,
+    changePassword,
     refresh,
     refreshRegister,
     start,
@@ -395,6 +449,8 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     start,
     submitFacultyLogin,
     switchFaculty,
+    updateProfile,
+    changePassword,
   ]);
 
   return (

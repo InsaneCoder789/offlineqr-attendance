@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import secrets
-from collections import defaultdict, deque
-from time import monotonic
 from uuid import uuid4
 
 from fastapi import Request
@@ -11,6 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import get_settings
 from .errors import ApiError
+from .redis_service import consume_rate_limit
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -28,40 +26,29 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
-class SlidingWindowRateLimitMiddleware(BaseHTTPMiddleware):
-    """Small dependency-free guard; production deployments should replace this with Redis."""
+class RedisRateLimitMiddleware(BaseHTTPMiddleware):
+    """Distributed request boundary shared by every API worker."""
 
-    protected_prefixes = ("/api/v1/attendance", "/api/v1/devices", "/api/v1/faculty/auth")
-
-    def __init__(self, app, limit: int = 60, window_seconds: int = 60):
-        super().__init__(app)
-        self.limit = limit
-        self.window_seconds = window_seconds
-        self._events: dict[str, deque[float]] = defaultdict(deque)
+    protected_prefixes = ("/api/v1/attendance", "/api/v1/devices", "/api/v1/faculty/auth", "/api/v1/admin")
 
     async def dispatch(self, request: Request, call_next):
         if not request.url.path.startswith(self.protected_prefixes):
             return await call_next(request)
-        now = monotonic()
         source = request.client.host if request.client else "unknown"
-        group = request.url.path.split("/")[3] if len(request.url.path.split("/")) > 3 else "api"
-        events = self._events[f"{source}:{group}"]
-        while events and events[0] <= now - self.window_seconds:
-            events.popleft()
-        if len(events) >= self.limit:
+        path = request.url.path
+        scope = "faculty-auth" if path.startswith("/api/v1/faculty/auth") else path.split("/")[3]
+        limit = 12 if scope == "faculty-auth" else 90
+        try:
+            result = consume_rate_limit(scope, source, limit=limit, window_seconds=60)
+        except ApiError as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"error": {"code": exc.code, "message": exc.message}},
+            )
+        if not result.allowed:
             return JSONResponse(
                 status_code=429,
                 content={"error": {"code": "RATE_LIMITED", "message": "Too many requests. Try again shortly."}},
-                headers={"Retry-After": str(self.window_seconds)},
+                headers={"Retry-After": str(result.retry_after_seconds)},
             )
-        events.append(now)
         return await call_next(request)
-
-
-def require_ict_approval(request: Request, *, strict: bool = False) -> None:
-    settings = get_settings()
-    supplied = request.headers.get("x-ict-approval-key", "")
-    if settings.development_enabled and not strict and not supplied:
-        return
-    if not secrets.compare_digest(supplied, settings.ict_admin_approval_key):
-        raise ApiError("ICT_APPROVAL_REQUIRED", "An ICT approval credential is required.", 403)

@@ -8,6 +8,8 @@ __pycache__/
 .codex_ppt_build/
 .playwright-mcp/
 .next/
+.next-build*/
+*.tsbuildinfo
 dist/
 build/
 node_modules/
@@ -16,6 +18,7 @@ node_modules/
 *.db
 *.pptx
 *.inspect.ndjson
+outputs/
 
 # Keep the public project README only.
 *.md

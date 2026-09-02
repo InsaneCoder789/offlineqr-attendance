@@ -58,7 +58,7 @@ export function LoginPage() {
           <Icon name="check" />
           {loginLoading ? "Signing in..." : "Open faculty dashboard"}
         </button>
-        <small>Demo password: admin</small>
+        <small>Your access is limited to faculty identity and assignments authorized by KIIT.</small>
       </section>
     </main>
   );

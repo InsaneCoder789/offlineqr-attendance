@@ -5,9 +5,6 @@ import { useEffect, useState } from "react";
 import { adminApi, type AdminDeviceDetail, type AdminDeviceHistory } from "../../admin-api";
 import { DeviceVisual } from "./DeviceVisual";
 
-const sessionKey = "offlineqr.ict.approval-key";
-const operatorKey = "offlineqr.ict.operator";
-
 function when(value?: string | null) { return value ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "Not recorded"; }
 
 export function AdminDeviceDetail({ deviceId }: { deviceId: string }) {
@@ -17,12 +14,9 @@ export function AdminDeviceDetail({ deviceId }: { deviceId: string }) {
   const [busy, setBusy] = useState(true);
 
   async function load() {
-    const key = sessionStorage.getItem(sessionKey);
-    const operator = sessionStorage.getItem(operatorKey) ?? "ict-admin";
-    if (!key) { setError("Open the Device Governance console and authenticate with an ICT credential first."); setBusy(false); return; }
     setBusy(true);
     try {
-      const [nextDevice, nextHistory] = await Promise.all([adminApi.device(key, operator, deviceId), adminApi.history(key, operator, deviceId)]);
+      const [nextDevice, nextHistory] = await Promise.all([adminApi.device(deviceId), adminApi.history(deviceId)]);
       setDevice(nextDevice); setHistory(nextHistory); setError(null);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Device record unavailable."); }
     finally { setBusy(false); }
@@ -33,10 +27,7 @@ export function AdminDeviceDetail({ deviceId }: { deviceId: string }) {
   async function revoke() {
     const reason = window.prompt("Reason for revoking this device", "Device reported lost or compromised.");
     if (!reason || reason.trim().length < 3) return;
-    const key = sessionStorage.getItem(sessionKey);
-    const operator = sessionStorage.getItem(operatorKey) ?? "ict-admin";
-    if (!key) return;
-    try { await adminApi.revoke(key, operator, deviceId, reason.trim()); await load(); }
+    try { await adminApi.revoke(deviceId, reason.trim()); await load(); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Device could not be revoked."); }
   }
 

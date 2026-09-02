@@ -14,7 +14,7 @@
 
 ## Overview
 
-OfflineQR Attendance is an offline-first classroom attendance platform. It combines a Flutter student app, a Next.js faculty portal, a protected ICT device-governance console, and a FastAPI/PostgreSQL backend.
+OfflineQR Attendance is an offline-first classroom attendance platform. It combines a Flutter student app, a Next.js faculty portal, an ICT device-governance console, and a FastAPI/PostgreSQL/Redis backend.
 
 The operating principle is simple: **capture locally, sign cryptographically, store durably, synchronize when reachable, and verify centrally.** Internet connectivity improves reconciliation and reporting, but it is not required for a student device to capture a valid attendance proof.
 
@@ -26,11 +26,14 @@ The operating principle is simple: **capture locally, sign cryptographically, st
 - Dynamic attendance sessions: faculty starts a course/section session, the QR payload rotates every 5 seconds, and each valid scan receives a 60-second proof-creation window.
 - Signed proof pipeline: Ed25519 device identity, signed attendance proof, local SQLite outbox, retry/backoff, batch synchronization, idempotency, reconciliation, and faculty roster polling.
 - Device binding and governance: one active device per student, challenge-response enrollment, revocation, audited replacement requests, ICT approval/rejection, device history, and emulator-declaration rejection.
+- Faculty identity: `@kiit.ac.in` accounts use Argon2id password hashes, server-owned HTTP-only sessions, CSRF validation, login lockout, forced first-password change, and editable name/phone profile fields.
 - Faculty portal: dedicated Next.js pages for login, dashboard, classes, live attendance, records, settings, projector mode, and ICT device governance.
+- Redis coordination: shared request limits, device-challenge throttling, opaque faculty-session storage, and attendance-session update publication across API workers.
+- Faculty provisioning: the restricted local onboarding register imports the validated staff identities, designation, and organisational unit; the official assignment/timetable import remains intentionally blocked on source data.
 - Controlled fallback: faculty manual attestation records the reason and attendance method separately from normal QR capture.
 - Quality gates: backend protocol/database tests, Flutter static and unit tests, faculty portal tests/build/audit, and backend/faculty Docker image builds.
 
-### Deferred Until Official Institutional Data Is Available
+### Deferred Until Official Academic Data Is Available
 
 - Faculty initialization and real per-faculty class access. This needs an authoritative import covering faculty identity, course offering, section, room, timetable, and enrolled-student roster.
 - Student/faculty provisioning from KIIT systems rather than the present demonstration seed data.
@@ -44,6 +47,7 @@ flowchart LR
     Local -->|Retry when backend is reachable| API[FastAPI API]
     Faculty[Next.js Faculty Portal] -->|Create and host session| API
     API --> DB[(PostgreSQL Authority)]
+    API --> Redis[(Redis Coordination)]
     API -->|Roster polling| Faculty
     ICT[ICT Device Governance Console] -->|Approve, reject, revoke| API
     DB --> Audit[Audit Trail and Attendance Records]
@@ -122,7 +126,7 @@ The current app rejects an emulator declaration, but client-reported device fact
 - Device inventory and lifecycle visibility.
 - Pending replacement review with an auditable decision note.
 - Device-level history and explicit revocation.
-- A protected API boundary today; production must replace the temporary shared ICT credential screen with institutional SSO, role-based access control, MFA, and server-side sessions.
+- An `ICT_ADMIN` database role is required for device inventory, approval, rejection, and revocation. The browser does not hold an ICT approval key; the approver is derived from the authenticated server session.
 
 ## Repository Layout
 
@@ -142,6 +146,7 @@ scripts/                 Database reset and database-boundary checks
 ### Prerequisites
 
 - PostgreSQL 16
+- Redis 7
 - Python 3.11
 - Node.js 22
 - Flutter 3.35.4
@@ -150,6 +155,14 @@ scripts/                 Database reset and database-boundary checks
 
 ```bash
 ./scripts/db_reset.sh
+```
+
+### Import Faculty Identities
+
+The supplied staff workbook is filtered to valid `@kiit.ac.in` addresses. The generated credential register is intentionally ignored by Git and must be distributed through an approved restricted channel. The importer stores only Argon2id password hashes; it does not import personal email or mobile data.
+
+```bash
+PYTHONPATH=. python scripts/import_faculty_identities.py --manifest /restricted/faculty-manifest.json --result /restricted/import-result.json
 ```
 
 ### Run the Backend
@@ -185,7 +198,7 @@ The continuous-integration workflow validates:
 
 | Boundary | Validation |
 | --- | --- |
-| Backend | PostgreSQL migrations, database assertions, 39 protocol/API tests, dependency audit |
+| Backend | PostgreSQL migrations, Redis coordination, database assertions, 42 protocol/API tests, dependency audit |
 | Faculty portal | Unit tests, TypeScript production build, dependency audit |
 | Student app | `flutter analyze` and Flutter tests |
 | Containers | Backend and faculty production-image builds |
@@ -196,14 +209,14 @@ Tagging a release (`v*`) publishes backend and faculty images to GHCR. The porta
 
 This repository is a hardened demonstration foundation, not yet an institutional production deployment. The following work remains before a real rollout:
 
-1. Replace all development identity endpoints and the demonstration password with KIIT OIDC/SAML, short-lived server sessions, role claims, and account recovery controls.
+1. Replace all development identity endpoints and demonstration passwords with KIIT OIDC/SAML, MFA, short-lived server sessions, role claims, and account recovery controls.
 2. Provision and validate the official academic source of truth: student identities, faculty identities, sections, offerings, registrations, rooms, and timetables.
 3. Add Play Integrity on Android and Apple App Attest/DeviceCheck on iOS. Treat device make/model and emulator status as risk signals, not proof.
-4. Move rate limiting, active-session state, and background reconciliation coordination to Redis or an equivalent shared service.
+4. Configure a managed Redis deployment with TLS, authentication, persistence policy, failover, and operational monitoring. Redis coordination is implemented; local development may use an intentionally restricted in-memory fallback only when Redis is not required.
 5. Add an authenticated background-sync strategy for Android/iOS; current retry polling is guaranteed only while the app is foregrounded or resumes.
 6. Build and test the selected local-presence provider. BLE proximity is deliberately not an active attendance requirement in the current demo and must not be claimed as deployed.
 7. Add production configuration for permitted origins, HTTPS termination, secret rotation, database backups, migration execution, monitoring, alerting, and disaster recovery. The current backend image does not run migrations automatically.
-8. Replace the ICT shared approval credential with institutional administrator SSO, MFA, least-privilege roles, and server-side audit identity.
+8. Replace the local `ICT_ADMIN` role bootstrap with institutional administrator SSO, MFA, formal least-privilege role provisioning, and a reviewed break-glass process.
 9. Add end-to-end tests across a physical Android/iOS device, backend, faculty browser, offline transition, and late-proof reconciliation.
 10. Complete accessibility, privacy retention/deletion policy, consent language, export controls, and institutional security review.
 

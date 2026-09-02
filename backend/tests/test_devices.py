@@ -21,12 +21,9 @@ from backend.app.device_crypto import (
     verify_signature,
 )
 from backend.app.main import app
+from backend.app.redis_service import clear_development_state
 
 DEV_STUDENT_ID = UUID("50000000-0000-4000-8000-000000000001")
-ICT_HEADERS = {
-    "x-ict-approval-key": get_settings().ict_admin_approval_key,
-    "x-ict-operator": "test-ict-admin",
-}
 
 
 def _signing_key(seed_byte: int) -> SigningKey:
@@ -50,12 +47,21 @@ class DeviceApiTest(unittest.TestCase):
         self._clear_device_state()
 
     def _clear_device_state(self) -> None:
+        clear_development_state()
         with psycopg.connect(get_settings().database_url) as conn:
             conn.execute("DELETE FROM device_replacement_requests")
             conn.execute("DELETE FROM device_challenges")
             conn.execute("UPDATE attendance_records SET device_registration_id = NULL")
             conn.execute("DELETE FROM device_registrations")
             conn.execute("DELETE FROM audit_logs")
+
+    def _ict_headers(self) -> dict[str, str]:
+        login = self.client.post(
+            "/api/v1/faculty/auth/login",
+            json={"email": "ananya.sen@kiit.ac.in", "password": "ChangeMe-Dev-Only!2026"},
+        )
+        self.assertEqual(login.status_code, 200, login.text)
+        return {"x-csrf-token": self.client.cookies.get("kiit_faculty_csrf")}
 
     def test_enrollment_challenge_response_creates_active_device(self) -> None:
         device = self._enroll(seed_byte=1)
@@ -141,7 +147,7 @@ class DeviceApiTest(unittest.TestCase):
         self.client.post(
             f"/api/v1/admin/device-replacements/{replacement['id']}/approve",
             json={"note": "Verified device switch for test coverage."},
-            headers=ICT_HEADERS,
+            headers=self._ict_headers(),
         )
         revoked = self.client.post(
             "/api/v1/devices/verification/challenge",
@@ -156,7 +162,7 @@ class DeviceApiTest(unittest.TestCase):
         approved = self.client.post(
             f"/api/v1/admin/device-replacements/{replacement['id']}/approve",
             json={"note": "Verified device switch for test coverage."},
-            headers=ICT_HEADERS,
+            headers=self._ict_headers(),
         )
 
         self.assertEqual(approved.status_code, 200)

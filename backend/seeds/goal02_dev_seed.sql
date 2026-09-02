@@ -20,6 +20,15 @@ VALUES
 ('40000000-0000-4000-8000-000000000002', 'DEVFAC002', 'vikram.rao@kiit.ac.in', 'Prof. Vikram Rao'),
 ('40000000-0000-4000-8000-000000000003', 'DEVFAC003', 'meera.nair@kiit.ac.in', 'Dr. Meera Nair');
 
+INSERT INTO faculty_credentials (faculty_id, password_hash, must_change_password)
+VALUES
+('40000000-0000-4000-8000-000000000001', '$argon2id$v=19$m=65536,t=3,p=2$Me8ShN1hllx5BzkSSYWoQA$B5V7txNYXNDOTMtcj3xEVaELILUI0NtvXETtUz9Vbag', false),
+('40000000-0000-4000-8000-000000000002', '$argon2id$v=19$m=65536,t=3,p=2$Me8ShN1hllx5BzkSSYWoQA$B5V7txNYXNDOTMtcj3xEVaELILUI0NtvXETtUz9Vbag', false),
+('40000000-0000-4000-8000-000000000003', '$argon2id$v=19$m=65536,t=3,p=2$Me8ShN1hllx5BzkSSYWoQA$B5V7txNYXNDOTMtcj3xEVaELILUI0NtvXETtUz9Vbag', false);
+
+UPDATE faculty SET access_role = 'ICT_ADMIN'
+WHERE employee_code = 'DEVFAC001';
+
 INSERT INTO students (id, roll_number, institutional_email, display_name)
 VALUES
 ('50000000-0000-4000-8000-000000000001', 'DEV24155001', 'dev24155001@kiit.ac.in', 'Aarav Mehta'),

@@ -21,6 +21,7 @@ from .device_crypto import (
     verify_signature,
 )
 from .errors import ApiError
+from .redis_service import consume_rate_limit
 
 CHALLENGE_TTL_SECONDS = 300
 CHALLENGE_RATE_LIMIT = 10
@@ -715,19 +716,14 @@ def _get_device_for_update(
 
 
 def _ensure_rate_limit(student_id: UUID, purpose: str) -> None:
-    with _connect() as conn:
-        count = conn.execute(
-            """
-            SELECT COUNT(*)::int AS count
-            FROM device_challenges
-            WHERE student_id = %s
-              AND purpose = %s
-              AND issued_at > now() - interval '1 minute'
-            """,
-            [student_id, purpose],
-        ).fetchone()["count"]
-        if count >= CHALLENGE_RATE_LIMIT:
-            raise ApiError("RATE_LIMITED", "Too many device challenge requests.", 429)
+    result = consume_rate_limit(
+        f"device-challenge:{purpose.lower()}",
+        str(student_id),
+        limit=CHALLENGE_RATE_LIMIT,
+        window_seconds=60,
+    )
+    if not result.allowed:
+        raise ApiError("RATE_LIMITED", "Too many device challenge requests.", 429)
 
 
 def _fingerprint_or_error(public_key: str) -> str:

@@ -23,11 +23,21 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports: [6379:6379]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     env:
       DATABASE_URL: postgresql://postgres@localhost/kiit_attendance_goal02
       PGHOST: localhost
       PGUSER: postgres
       APP_ENV: development
+      REDIS_URL: redis://127.0.0.1:6379/0
+      REDIS_REQUIRED: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

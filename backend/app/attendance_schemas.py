@@ -36,6 +36,23 @@ class FacultyLoginOut(BaseModel):
     employee_code: str | None
     institutional_email: str
     display_name: str
+    phone_number: str | None = None
+    designation: str | None = None
+    org_unit: str | None = None
+    access_role: str = "FACULTY"
+    must_change_password: bool = False
+    password_changed_at: datetime | None = None
+    last_login_at: datetime | None = None
+
+
+class FacultyProfileUpdateIn(BaseModel):
+    display_name: str = Field(min_length=2, max_length=120)
+    phone_number: str | None = Field(default=None, max_length=24)
+
+
+class FacultyPasswordChangeIn(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=14, max_length=128)
 
 
 class TrustRootOut(BaseModel):

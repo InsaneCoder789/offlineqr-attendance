@@ -63,18 +63,16 @@ export type ReplacementRequest = {
 
 const apiBase = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000";
 
-function headers(key: string, operator: string): HeadersInit {
-  return {
-    "Content-Type": "application/json",
-    "x-ict-approval-key": key,
-    "x-ict-operator": operator || "ict-admin",
-  };
+function csrfHeaders(init?: RequestInit): HeadersInit {
+  const csrf = typeof document === "undefined" ? "" : document.cookie.split("; ").find((item) => item.startsWith("kiit_faculty_csrf="))?.split("=")[1] ?? "";
+  return { "Content-Type": "application/json", ...(init?.method && init.method !== "GET" ? { "X-CSRF-Token": decodeURIComponent(csrf) } : {}) };
 }
 
-async function request<T>(path: string, key: string, operator: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
     ...init,
-    headers: { ...headers(key, operator), ...(init?.headers ?? {}) },
+    headers: { ...csrfHeaders(init), ...(init?.headers ?? {}) },
+    credentials: "include",
     cache: "no-store",
   });
   if (!response.ok) {
@@ -85,13 +83,12 @@ async function request<T>(path: string, key: string, operator: string, init?: Re
 }
 
 export const adminApi = {
-  stats: (key: string, operator: string) => request<AdminStats>("/api/v1/admin/device-stats", key, operator),
-  devices: (key: string, operator: string, query = "", status = "") =>
-    request<AdminDevice[]>(`/api/v1/admin/devices?query=${encodeURIComponent(query)}&status=${encodeURIComponent(status)}`, key, operator),
-  device: (key: string, operator: string, id: string) => request<AdminDeviceDetail>(`/api/v1/admin/devices/${id}`, key, operator),
-  history: (key: string, operator: string, id: string) => request<AdminDeviceHistory[]>(`/api/v1/admin/devices/${id}/history`, key, operator),
-  replacements: (key: string, operator: string) => request<ReplacementRequest[]>("/api/v1/admin/device-replacements", key, operator),
-  approve: (key: string, operator: string, id: string, note: string) => request(`/api/v1/admin/device-replacements/${id}/approve`, key, operator, { method: "POST", body: JSON.stringify({ note }) }),
-  reject: (key: string, operator: string, id: string, note: string) => request(`/api/v1/admin/device-replacements/${id}/reject`, key, operator, { method: "POST", body: JSON.stringify({ note }) }),
-  revoke: (key: string, operator: string, id: string, reason: string) => request(`/api/v1/admin/devices/${id}/revoke`, key, operator, { method: "POST", body: JSON.stringify({ reason }) }),
+  stats: () => request<AdminStats>("/api/v1/admin/device-stats"),
+  devices: (query = "", status = "") => request<AdminDevice[]>(`/api/v1/admin/devices?query=${encodeURIComponent(query)}&status=${encodeURIComponent(status)}`),
+  device: (id: string) => request<AdminDeviceDetail>(`/api/v1/admin/devices/${id}`),
+  history: (id: string) => request<AdminDeviceHistory[]>(`/api/v1/admin/devices/${id}/history`),
+  replacements: () => request<ReplacementRequest[]>("/api/v1/admin/device-replacements"),
+  approve: (id: string, note: string) => request(`/api/v1/admin/device-replacements/${id}/approve`, { method: "POST", body: JSON.stringify({ note }) }),
+  reject: (id: string, note: string) => request(`/api/v1/admin/device-replacements/${id}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
+  revoke: (id: string, reason: string) => request(`/api/v1/admin/devices/${id}/revoke`, { method: "POST", body: JSON.stringify({ reason }) }),
 };
