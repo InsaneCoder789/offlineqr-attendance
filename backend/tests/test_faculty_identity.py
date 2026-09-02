@@ -58,6 +58,24 @@ class FacultyIdentityApiTest(unittest.TestCase):
         self.assertEqual(response.json()["error"]["code"], "INVALID_CREDENTIALS")
         self.assertNotIn("kiit_faculty_session", self.client.cookies)
 
+    def test_authenticated_faculty_receives_redis_backed_session_events(self) -> None:
+        self._login()
+        courses = self.client.get("/api/v1/faculty/courses")
+        self.assertEqual(courses.status_code, 200, courses.text)
+        started = self.client.post(
+            "/api/v1/faculty/attendance-sessions/start",
+            headers={"x-csrf-token": self.client.cookies.get("kiit_faculty_csrf")},
+            json={"course_offering_id": courses.json()[0]["course_offering_id"]},
+        )
+        self.assertEqual(started.status_code, 200, started.text)
+        with self.client.websocket_connect(
+            f"/api/v1/faculty/attendance-sessions/{started.json()['id']}/events",
+            headers={"origin": "http://127.0.0.1:5173"},
+        ) as websocket:
+            event = websocket.receive_json()
+        self.assertEqual(event["type"], "SESSION_UPDATED")
+        self.assertEqual(event["session_id"], started.json()["id"])
+
 
 if __name__ == "__main__":
     unittest.main()

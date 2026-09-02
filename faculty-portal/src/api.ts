@@ -1,6 +1,6 @@
 import type { SessionAuthorization } from "./protocol";
 
-const API_BASE = process.env.NEXT_PUBLIC_ATTENDANCE_API_BASE ?? "http://127.0.0.1:8000";
+export const ATTENDANCE_API_BASE = process.env.NEXT_PUBLIC_ATTENDANCE_API_BASE ?? "http://127.0.0.1:8000";
 
 export type FacultyClass = {
   course_offering_id: string;
@@ -129,11 +129,20 @@ function apiHeaders(mutating = false, contentType = false): HeadersInit {
 }
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(`${API_BASE}${path}`, {
+  return fetch(`${ATTENDANCE_API_BASE}${path}`, {
     ...init,
     credentials: "include",
+    cache: "no-store",
     headers: { ...apiHeaders(Boolean(init.method && init.method !== "GET" && init.method !== "HEAD"), Boolean(init.body)), ...init.headers },
   });
+}
+
+export function facultySessionEventUrl(sessionId: string): string {
+  const endpoint = new URL(ATTENDANCE_API_BASE);
+  endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
+  endpoint.pathname = `/api/v1/faculty/attendance-sessions/${sessionId}/events`;
+  endpoint.search = "";
+  return endpoint.toString();
 }
 
 export async function loginFaculty(email: string, password: string): Promise<FacultyIdentity> {

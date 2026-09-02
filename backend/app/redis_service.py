@@ -178,3 +178,14 @@ def publish_session_event(session_id: UUID, event_type: str) -> int:
         current = int(_dev_get(version_key) or "0") + 1
         _dev_set(version_key, str(current), 60 * 60 * 24 * 8)
         return current
+
+
+def session_event_version(session_id: UUID) -> int:
+    """Read the lightweight Redis version used by authenticated WebSocket clients."""
+    key = f"attendance:session:{session_id}:version"
+    try:
+        return int(_client().get(key) or "0")
+    except RedisError:
+        if get_settings().redis_required:
+            _unavailable()
+        return int(_dev_get(key) or "0")

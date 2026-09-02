@@ -1,10 +1,11 @@
 import logging
 import secrets
+import asyncio
 from contextlib import asynccontextmanager
 from time import perf_counter
 from uuid import UUID
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from .attendance_schemas import (
@@ -93,7 +94,7 @@ from .admin_service import (
 )
 from .errors import ApiError, api_error_handler
 from .repositories import bootstrap_student_sync, get_faculty_by_identity, get_student, get_student_by_email
-from .redis_service import assert_available, faculty_session, publish_session_event, revoke_faculty_session
+from .redis_service import assert_available, faculty_session, publish_session_event, revoke_faculty_session, session_event_version
 from .security import RedisRateLimitMiddleware, SecurityHeadersMiddleware
 from .schemas import (
     AttendanceRecordOut,
@@ -161,6 +162,14 @@ def _ict_admin_from_request(request: Request) -> tuple[UUID, dict]:
     if profile["access_role"] != "ICT_ADMIN":
         raise ApiError("ICT_ADMIN_REQUIRED", "An ICT administrator session is required.", 403)
     return faculty_id, profile
+
+
+def _websocket_origin_allowed(origin: str | None) -> bool:
+    if not origin:
+        return False
+    if not settings.development_enabled:
+        return origin in settings.cors_allowed_origins
+    return origin.startswith(("http://localhost:", "http://127.0.0.1:", "http://10.", "http://192.168."))
 
 
 def _student_id_from_request(request: Request) -> UUID:
@@ -354,6 +363,36 @@ def faculty_attest(session_id: UUID, payload: FacultyAttestationIn, request: Req
 @app.get("/api/v1/faculty/attendance-sessions/{session_id}/qr", response_model=QrPayloadOut)
 def faculty_session_qr(session_id: UUID) -> dict:
     return qr_payload_for(session_id)
+
+
+@app.websocket("/api/v1/faculty/attendance-sessions/{session_id}/events")
+async def faculty_session_events(websocket: WebSocket, session_id: UUID) -> None:
+    """Authenticated Redis-backed session updates without browser polling the roster."""
+    if not _websocket_origin_allowed(websocket.headers.get("origin")):
+        await websocket.close(code=1008)
+        return
+    token = websocket.cookies.get("kiit_faculty_session", "")
+    identity = faculty_session(token) if token else None
+    if identity is None:
+        await websocket.close(code=1008)
+        return
+    try:
+        faculty_id = UUID(identity["faculty_id"])
+        get_faculty_session(faculty_id, session_id)
+    except (ApiError, ValueError):
+        await websocket.close(code=1008)
+        return
+    await websocket.accept()
+    version = -1
+    try:
+        while True:
+            next_version = session_event_version(session_id)
+            if next_version != version:
+                version = next_version
+                await websocket.send_json({"type": "SESSION_UPDATED", "session_id": str(session_id), "version": version})
+            await asyncio.sleep(1)
+    except Exception as exc:
+        logger.debug("faculty_session_websocket_closed", extra={"session_id": str(session_id), "reason": type(exc).__name__})
 
 
 @app.post("/api/v1/attendance-claims", response_model=AttendanceClaimOut)

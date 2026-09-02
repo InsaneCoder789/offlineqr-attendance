@@ -19,6 +19,7 @@ import {
   fetchSession,
   fetchSessionHistory,
   fetchTodayClasses,
+  facultySessionEventUrl,
   loginFaculty,
   logoutFaculty,
   startSession,
@@ -233,10 +234,10 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     }
   }, []);
 
-  const refreshActiveSession = useCallback(async () => {
-    if (!session || session.closed_at || loading) return;
+  const refreshActiveSession = useCallback(async (sessionId: string | null) => {
+    if (!sessionId || loading) return;
     try {
-      const updatedSession = await fetchSession(session.id);
+      const updatedSession = await fetchSession(sessionId);
       if (!updatedSession) {
         setSession(null);
         setRoster([]);
@@ -248,7 +249,7 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     } catch {
       // Keep the active classroom view usable with the last local roster.
     }
-  }, [loading, session]);
+  }, [loading]);
 
   const start = useCallback(async (courseOfferingId: string) => {
     setLoading(true);
@@ -374,9 +375,38 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
   }, []);
 
   useEffect(() => {
-    const timer = window.setInterval(refreshActiveSession, 2500);
-    return () => window.clearInterval(timer);
-  }, [refreshActiveSession]);
+    const sessionId = session && !session.closed_at ? session.id : null;
+    if (!sessionId || !online || !facultyIdentity) return;
+    let socket: WebSocket | null = null;
+    let fallbackTimer: number | null = null;
+    let reconnectTimer: number | null = null;
+    let disposed = false;
+
+    const beginFallback = () => {
+      if (fallbackTimer === null) fallbackTimer = window.setInterval(() => void refreshActiveSession(sessionId), 5000);
+    };
+    const connect = () => {
+      if (disposed) return;
+      socket = new WebSocket(facultySessionEventUrl(sessionId));
+      socket.onopen = () => {
+        if (fallbackTimer !== null) { window.clearInterval(fallbackTimer); fallbackTimer = null; }
+      };
+      socket.onmessage = () => void refreshActiveSession(sessionId);
+      socket.onerror = () => socket?.close();
+      socket.onclose = () => {
+        if (disposed) return;
+        beginFallback();
+        reconnectTimer = window.setTimeout(connect, 4000);
+      };
+    };
+    connect();
+    return () => {
+      disposed = true;
+      socket?.close();
+      if (fallbackTimer !== null) window.clearInterval(fallbackTimer);
+      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+    };
+  }, [facultyIdentity, facultySessionEventUrl, online, refreshActiveSession, session?.closed_at, session?.id]);
 
   const value = useMemo<FacultyPortalState>(() => ({
     classes,
