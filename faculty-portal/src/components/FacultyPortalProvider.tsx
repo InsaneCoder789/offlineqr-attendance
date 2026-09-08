@@ -224,8 +224,11 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     setError(null);
     try {
       await changeFacultyPassword(currentPassword, newPassword);
-      const profile = await fetchFacultyProfile();
-      if (profile) setFacultyIdentity(profile);
+      clearFacultyIdentity();
+      clearCachedActiveSession();
+      setFacultyIdentity(null);
+      setSession(null);
+      setRoster([]);
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : "Could not change password");
       throw exception;

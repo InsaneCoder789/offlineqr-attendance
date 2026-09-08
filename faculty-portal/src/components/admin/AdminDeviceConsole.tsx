@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { adminApi, type AdminDevice, type AdminStats, type ReplacementRequest } from "../../admin-api";
+import QRCode from "qrcode";
+import { adminApi, type AdminDevice, type AdminStats, type DeviceActivationQr, type ReplacementRequest } from "../../admin-api";
 import { DeviceVisual } from "./DeviceVisual";
 
 function dateTime(value?: string | null) {
@@ -17,6 +18,8 @@ export function AdminDeviceConsole() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [activation, setActivation] = useState<DeviceActivationQr | null>(null);
+  const [activationImage, setActivationImage] = useState("");
 
   async function load() {
     setLoading(true);
@@ -45,7 +48,14 @@ export function AdminDeviceConsole() {
     const note = window.prompt(action === "approve" ? "Approval note" : "Rejection reason", "Identity and device profile reviewed.");
     if (!note || note.trim().length < 3) return;
     try {
-      await (action === "approve" ? adminApi.approve(request.id, note.trim()) : adminApi.reject(request.id, note.trim()));
+      if (action === "approve") {
+        await adminApi.approve(request.id, note.trim());
+        const nextActivation = await adminApi.activationQr(request.id);
+        setActivation(nextActivation);
+        setActivationImage(await QRCode.toDataURL(nextActivation.qr_payload, { width: 420, margin: 2, errorCorrectionLevel: "M" }));
+      } else {
+        await adminApi.reject(request.id, note.trim());
+      }
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Decision could not be recorded.");
@@ -68,12 +78,13 @@ export function AdminDeviceConsole() {
       </section>
       <section className="admin-panel">
         <div className="admin-panel-heading"><div><h2>Replacement approvals</h2><p>New devices remain inactive until an ICT decision is recorded.</p></div></div>
-        {replacements.length === 0 ? <p className="admin-empty">No replacement requests require review.</p> : <div className="replacement-list">{replacements.map((request) => <article className="replacement-row" key={request.id}><DeviceVisual manufacturer={request.new_manufacturer} platform={request.new_platform} /><div><strong>{request.student_name} <span>{request.roll_number}</span></strong><p>{request.old_manufacturer ?? request.old_platform} {request.old_model ?? "device"} to {request.new_manufacturer ?? request.new_platform} {request.new_model ?? "device"}</p><small>{request.reason} · requested {dateTime(request.requested_at)}</small></div><span className="risk-chip">{request.new_integrity_status.replaceAll("_", " ")}</span><div className="decision-actions"><button onClick={() => void decide(request, "approve")}>Approve</button><button className="danger" onClick={() => void decide(request, "reject")}>Reject</button></div></article>)}</div>}
+        {replacements.length === 0 ? <p className="admin-empty">No replacement requests require review.</p> : <div className="replacement-list">{replacements.map((request) => <article className="replacement-row" key={request.id}><DeviceVisual manufacturer={request.new_manufacturer} platform={request.new_platform} /><div><strong>{request.student_name} <span>{request.roll_number}</span></strong><p>{request.old_manufacturer ?? request.old_platform} {request.old_model ?? "device"} to {request.new_manufacturer ?? request.new_platform} {request.new_model ?? "device"}</p><small>{request.reason} · requested {dateTime(request.requested_at)}</small></div><span className="risk-chip">{request.new_integrity_status.replaceAll("_", " ")}</span><div className="decision-actions">{request.status === "APPROVED" ? <button onClick={() => void adminApi.activationQr(request.id).then(async (qr) => { setActivation(qr); setActivationImage(await QRCode.toDataURL(qr.qr_payload, { width: 420, margin: 2, errorCorrectionLevel: "M" })); }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Could not create activation QR."))}>Show activation QR</button> : <><button onClick={() => void decide(request, "approve")}>Approve</button><button className="danger" onClick={() => void decide(request, "reject")}>Reject</button></>}</div></article>)}</div>}
       </section>
       <section className="admin-panel">
         <div className="admin-panel-heading"><div><h2>Registered device inventory</h2><p>Only non-sensitive, reviewable device facts are retained. Hardware identifiers are not collected.</p></div><div className="admin-filters"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search roll, student, or key fingerprint" /><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All states</option><option value="ACTIVE">Active</option><option value="PENDING">Pending</option><option value="REVOKED">Revoked</option></select><button onClick={() => void load()}>Apply</button></div></div>
         <div className="device-grid">{devices.map((device) => <Link className="device-card" href={`/admin/devices/${device.id}`} key={device.id}><div className="device-card-top"><DeviceVisual manufacturer={device.manufacturer} platform={device.platform} /><span className={`device-state ${device.status.toLowerCase()}`}>{device.status}</span></div><p className="device-reference">{device.device_reference}</p><h3>{device.manufacturer ?? device.platform} {device.device_model ?? "Attendance device"}</h3><p>{device.student_name} · {device.roll_number}</p><dl><div><dt>Section</dt><dd>{device.section_code}</dd></div><div><dt>Integrity</dt><dd>{device.integrity_status.replaceAll("_", " ")}</dd></div><div><dt>Last seen</dt><dd>{dateTime(device.last_seen_at)}</dd></div></dl>{device.risk_flags.length ? <div className="risk-list">{device.risk_flags.map((flag) => <span key={flag}>{flag.replaceAll("_", " ")}</span>)}</div> : null}</Link>)}</div>
       </section>
+      {activation ? <div className="admin-modal-backdrop" role="presentation"><section className="admin-activation-modal" role="dialog" aria-modal="true" aria-label="Device activation QR"><button className="modal-close" onClick={() => setActivation(null)} aria-label="Close">×</button><p className="eyeline">ICT supervised activation</p><h2>Scan on the new phone</h2><p>This QR is single-use and expires at {dateTime(activation.expires_at)}. It authorizes only the already approved replacement device.</p>{activationImage ? <img src={activationImage} alt="One-time device activation QR" /> : null}<button className="secondary" onClick={() => setActivation(null)}>Close</button></section></div> : null}
     </main>
   );
 }

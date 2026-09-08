@@ -1667,3 +1667,9 @@ canvas {
     flex-wrap: wrap;
   }
 }
+.admin-modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: rgb(11 25 16 / .58); }
+.admin-activation-modal { position: relative; width: min(100%, 560px); padding: 32px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: 0 24px 72px rgb(0 0 0 / .28); text-align: center; }
+.admin-activation-modal h2 { margin: 4px 0 12px; }
+.admin-activation-modal p { color: var(--muted); line-height: 1.55; }
+.admin-activation-modal img { display: block; width: min(100%, 420px); height: auto; margin: 24px auto; image-rendering: pixelated; }
+.modal-close { position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: var(--text); font-size: 28px; line-height: 1; cursor: pointer; }

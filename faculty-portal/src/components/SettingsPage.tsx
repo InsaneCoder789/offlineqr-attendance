@@ -73,7 +73,7 @@ export function SettingsPage() {
       </div>
       <div className="setting-row">
         <span>Portal type</span>
-        <strong>Next.js PWA-ready console</strong>
+        <strong>Secure faculty console</strong>
       </div>
       <div className="setting-row">
         <span>Attendance mode</span>

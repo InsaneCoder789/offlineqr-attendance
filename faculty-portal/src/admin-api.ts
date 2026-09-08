@@ -59,6 +59,13 @@ export type ReplacementRequest = {
   new_model?: string | null;
   new_integrity_status: string;
   new_risk_flags: string[];
+  status?: "PENDING" | "APPROVED";
+};
+
+export type DeviceActivationQr = {
+  replacement_request_id: string;
+  qr_payload: string;
+  expires_at: string;
 };
 
 const apiBase = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000";
@@ -89,6 +96,7 @@ export const adminApi = {
   history: (id: string) => request<AdminDeviceHistory[]>(`/api/v1/admin/devices/${id}/history`),
   replacements: () => request<ReplacementRequest[]>("/api/v1/admin/device-replacements"),
   approve: (id: string, note: string) => request(`/api/v1/admin/device-replacements/${id}/approve`, { method: "POST", body: JSON.stringify({ note }) }),
+  activationQr: (id: string) => request<DeviceActivationQr>(`/api/v1/admin/device-replacements/${id}/activation-qr`, { method: "POST" }),
   reject: (id: string, note: string) => request(`/api/v1/admin/device-replacements/${id}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
   revoke: (id: string, reason: string) => request(`/api/v1/admin/devices/${id}/revoke`, { method: "POST", body: JSON.stringify({ reason }) }),
 };
