@@ -1,0 +1,30 @@
+name: Faculty Dependency Audit
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: faculty-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Production dependency vulnerabilities
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: faculty-portal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: faculty-portal/package-lock.json
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high

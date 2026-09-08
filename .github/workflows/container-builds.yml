@@ -1,0 +1,32 @@
+name: Container Build Verification
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-builds-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Backend and portal images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: false
+          tags: offlineqr/backend:ci
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: faculty-portal/Dockerfile
+          push: false
+          tags: offlineqr/faculty-portal:ci
