@@ -12,6 +12,7 @@ class Settings:
     redis_url: str
     redis_required: bool
     faculty_session_ttl_seconds: int
+    student_session_ttl_seconds: int
     faculty_cookie_secure: bool
     cors_allowed_origins: tuple[str, ...]
 
@@ -48,6 +49,7 @@ def get_settings() -> Settings:
         redis_required=os.environ.get("REDIS_REQUIRED", "").lower() in {"1", "true", "yes"}
         or os.environ.get("APP_ENV", "development") != "development",
         faculty_session_ttl_seconds=int(os.environ.get("FACULTY_SESSION_TTL_SECONDS", "28800")),
+        student_session_ttl_seconds=int(os.environ.get("STUDENT_SESSION_TTL_SECONDS", "43200")),
         faculty_cookie_secure=os.environ.get("FACULTY_COOKIE_SECURE", "").lower() in {"1", "true", "yes"}
         or os.environ.get("APP_ENV", "development") != "development",
         cors_allowed_origins=configured_origins,

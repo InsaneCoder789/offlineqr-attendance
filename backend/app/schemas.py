@@ -15,6 +15,27 @@ class DevLoginIn(BaseModel):
     email: str
 
 
+class StudentLoginIn(BaseModel):
+    roll_number: str
+    password: str
+
+
+class StudentLoginOut(StudentOut):
+    access_token: str
+    token_type: str = "Bearer"
+    expires_in: int
+    must_change_password: bool
+
+
+class StudentPasswordChangeIn(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class StudentPasswordResetOut(BaseModel):
+    temporary_password: str
+
+
 class AcademicTermOut(BaseModel):
     id: UUID
     name: str

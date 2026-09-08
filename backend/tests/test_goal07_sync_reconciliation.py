@@ -22,7 +22,10 @@ from backend.app.presence_protocol import (
 DEV_STUDENT_ID = UUID("50000000-0000-4000-8000-000000000001")
 class Goal07SyncReconciliationTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.client = TestClient(app)
+        self.client = TestClient(app, headers={
+            "x-student-id": "50000000-0000-4000-8000-000000000001",
+            "x-faculty-id": "40000000-0000-4000-8000-000000000001",
+        })
         self._clear_state()
         self.key = SigningKey(bytes([77]) * 32)
         self.public_key = b64url_encode(bytes(self.key.verify_key))

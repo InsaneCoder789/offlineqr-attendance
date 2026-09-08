@@ -106,12 +106,21 @@ def create_faculty_session(faculty_id: UUID) -> tuple[str, str]:
     settings = get_settings()
     payload = json.dumps({"faculty_id": str(faculty_id), "csrf": csrf_token})
     key = f"attendance:faculty-session:{_hashed(token)}"
+    index_key = f"attendance:faculty-session-index:{faculty_id}"
     try:
-        _client().set(key, payload, ex=settings.faculty_session_ttl_seconds, nx=True)
+        pipe = _client().pipeline(transaction=True)
+        pipe.set(key, payload, ex=settings.faculty_session_ttl_seconds, nx=True)
+        pipe.sadd(index_key, key)
+        pipe.expire(index_key, settings.faculty_session_ttl_seconds)
+        pipe.execute()
     except RedisError:
         if settings.redis_required:
             _unavailable()
         _dev_set(key, payload, settings.faculty_session_ttl_seconds)
+        indexed = json.loads(_dev_get(index_key) or "[]")
+        if key not in indexed:
+            indexed.append(key)
+        _dev_set(index_key, json.dumps(indexed), settings.faculty_session_ttl_seconds)
     return token, csrf_token
 
 
@@ -119,8 +128,6 @@ def faculty_session(token: str) -> dict[str, str] | None:
     key = f"attendance:faculty-session:{_hashed(token)}"
     try:
         raw = _client().get(key)
-        if raw is not None:
-            _client().expire(key, get_settings().faculty_session_ttl_seconds)
     except RedisError:
         if get_settings().redis_required:
             _unavailable()
@@ -146,6 +153,87 @@ def revoke_faculty_session(token: str) -> None:
         if get_settings().redis_required:
             _unavailable()
         _DEV_CACHE.pop(key, None)
+
+
+def revoke_faculty_sessions(faculty_id: UUID) -> None:
+    """Invalidate every browser session after a faculty credential change."""
+    index_key = f"attendance:faculty-session-index:{faculty_id}"
+    try:
+        keys = list(_client().smembers(index_key))
+        pipe = _client().pipeline(transaction=True)
+        if keys:
+            pipe.delete(*keys)
+        pipe.delete(index_key)
+        pipe.execute()
+    except RedisError:
+        if get_settings().redis_required:
+            _unavailable()
+        keys = json.loads(_dev_get(index_key) or "[]")
+        for key in keys:
+            _DEV_CACHE.pop(key, None)
+        _DEV_CACHE.pop(index_key, None)
+
+
+def create_student_session(student_id: UUID, *, must_change_password: bool = False) -> str:
+    """Issue an opaque mobile session and index it for emergency revocation."""
+    token = secrets.token_urlsafe(48)
+    settings = get_settings()
+    key = f"attendance:student-session:{_hashed(token)}"
+    index_key = f"attendance:student-session-index:{student_id}"
+    payload = json.dumps({"student_id": str(student_id), "must_change_password": must_change_password})
+    try:
+        pipe = _client().pipeline(transaction=True)
+        pipe.set(key, payload, ex=settings.student_session_ttl_seconds, nx=True)
+        pipe.sadd(index_key, key)
+        pipe.expire(index_key, settings.student_session_ttl_seconds)
+        pipe.execute()
+    except RedisError:
+        if settings.redis_required:
+            _unavailable()
+        _dev_set(key, payload, settings.student_session_ttl_seconds)
+        indexed = json.loads(_dev_get(index_key) or "[]")
+        if key not in indexed:
+            indexed.append(key)
+        _dev_set(index_key, json.dumps(indexed), settings.student_session_ttl_seconds)
+    return token
+
+
+def student_session(token: str) -> dict[str, str] | None:
+    if not token or len(token) > 256:
+        return None
+    key = f"attendance:student-session:{_hashed(token)}"
+    try:
+        raw = _client().get(key)
+    except RedisError:
+        if get_settings().redis_required:
+            _unavailable()
+        raw = _dev_get(key)
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw)
+        return payload if isinstance(payload.get("student_id"), str) else None
+    except (TypeError, ValueError):
+        return None
+
+
+def revoke_student_sessions(student_id: UUID) -> None:
+    """Invalidate all mobile sessions after a password or device-security event."""
+    index_key = f"attendance:student-session-index:{student_id}"
+    try:
+        keys = list(_client().smembers(index_key))
+        pipe = _client().pipeline(transaction=True)
+        if keys:
+            pipe.delete(*keys)
+        pipe.delete(index_key)
+        pipe.execute()
+    except RedisError:
+        if get_settings().redis_required:
+            _unavailable()
+        keys = json.loads(_dev_get(index_key) or "[]")
+        for key in keys:
+            _DEV_CACHE.pop(key, None)
+        _DEV_CACHE.pop(index_key, None)
 
 
 def clear_development_state() -> None:

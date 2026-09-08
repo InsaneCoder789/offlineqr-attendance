@@ -1,14 +1,37 @@
 from __future__ import annotations
 
 import unittest
+from uuid import UUID
 
+import psycopg
 from fastapi.testclient import TestClient
 
+from backend.app.config import get_settings
 from backend.app.main import app
+from backend.app.redis_service import clear_development_state
+
+
+DEV_FACULTY_ID = UUID("40000000-0000-4000-8000-000000000001")
+DEV_PASSWORD = "ChangeMe-Dev-Only!2026"
+DEV_PASSWORD_HASH = (
+    "$argon2id$v=19$m=65536,t=3,p=2$Me8ShN1hllx5BzkSSYWoQA$"
+    "B5V7txNYXNDOTMtcj3xEVaELILUI0NtvXETtUz9Vbag"
+)
 
 
 class FacultyIdentityApiTest(unittest.TestCase):
     def setUp(self) -> None:
+        clear_development_state()
+        with psycopg.connect(get_settings().database_url) as conn:
+            conn.execute(
+                """
+                UPDATE faculty_credentials
+                SET password_hash=%s, must_change_password=false,
+                    failed_login_count=0, locked_until=NULL, updated_at=now()
+                WHERE faculty_id=%s
+                """,
+                [DEV_PASSWORD_HASH, DEV_FACULTY_ID],
+            )
         self.client = TestClient(app)
 
     def _login(self) -> dict:
@@ -16,7 +39,7 @@ class FacultyIdentityApiTest(unittest.TestCase):
             "/api/v1/faculty/auth/login",
             json={
                 "email": "ananya.sen@kiit.ac.in",
-                "password": "ChangeMe-Dev-Only!2026",
+                "password": DEV_PASSWORD,
             },
         )
         self.assertEqual(response.status_code, 200, response.text)
@@ -75,6 +98,30 @@ class FacultyIdentityApiTest(unittest.TestCase):
             event = websocket.receive_json()
         self.assertEqual(event["type"], "SESSION_UPDATED")
         self.assertEqual(event["session_id"], started.json()["id"])
+
+    def test_password_change_revokes_every_faculty_session(self) -> None:
+        second_client = TestClient(app)
+        self._login()
+        second_login = second_client.post(
+            "/api/v1/faculty/auth/login",
+            json={"email": "ananya.sen@kiit.ac.in", "password": DEV_PASSWORD},
+        )
+        self.assertEqual(second_login.status_code, 200, second_login.text)
+
+        changed = self.client.post(
+            "/api/v1/faculty/auth/password",
+            headers={"x-csrf-token": self.client.cookies.get("kiit_faculty_csrf")},
+            json={
+                "current_password": DEV_PASSWORD,
+                "new_password": "Faculty-Secure-2026!",
+            },
+        )
+        self.assertEqual(changed.status_code, 200, changed.text)
+        self.assertNotIn("kiit_faculty_session", self.client.cookies)
+
+        revoked = second_client.get("/api/v1/faculty/profile")
+        self.assertEqual(revoked.status_code, 401)
+        self.assertEqual(revoked.json()["error"]["code"], "FACULTY_SESSION_EXPIRED")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+from hashlib import sha256
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -25,6 +26,7 @@ from .redis_service import consume_rate_limit
 
 CHALLENGE_TTL_SECONDS = 300
 CHALLENGE_RATE_LIMIT = 10
+ACTIVATION_QR_TTL_SECONDS = 300
 
 
 def create_enrollment_challenge(student_id: UUID) -> dict[str, Any]:
@@ -316,6 +318,18 @@ def request_replacement(
             ):
                 raise ApiError("INVALID_DEVICE_SIGNATURE", "Invalid replacement signature.", 400)
 
+            existing_request = conn.execute(
+                """SELECT id FROM device_replacement_requests
+                   WHERE student_id=%s AND status IN ('PENDING', 'APPROVED') FOR UPDATE""",
+                [student_id],
+            ).fetchone()
+            if existing_request is not None:
+                raise ApiError(
+                    "REPLACEMENT_ALREADY_PENDING",
+                    "A device replacement request is already awaiting completion.",
+                    409,
+                )
+
             pending = conn.execute(
                 """
                 INSERT INTO device_registrations (
@@ -403,22 +417,6 @@ def approve_replacement(*, request_id: UUID, approved_by: str, decision_note: st
             if request is None:
                 raise ApiError("REPLACEMENT_NOT_FOUND", "Pending replacement request was not found.", 404)
 
-            conn.execute(
-                """
-                UPDATE device_registrations
-                SET status = 'REVOKED', revoked_at = now(), updated_at = now()
-                WHERE id = %s AND status = 'ACTIVE'
-                """,
-                [request["old_device_registration_id"]],
-            )
-            conn.execute(
-                """
-                UPDATE device_registrations
-                SET status = 'ACTIVE', registered_at = now(), last_seen_at = now(), updated_at = now()
-                WHERE id = %s AND status = 'PENDING'
-                """,
-                [request["new_device_registration_id"]],
-            )
             updated = conn.execute(
                 """
                 UPDATE device_replacement_requests
@@ -440,6 +438,77 @@ def approve_replacement(*, request_id: UUID, approved_by: str, decision_note: st
                 {"approved_by": approved_by, "decision_note": decision_note},
             )
     return dict(updated)
+
+
+def create_activation_qr(*, request_id: UUID, issued_by: str) -> dict[str, Any]:
+    """Create a server-stateful, one-use QR after ICT explicitly approves a switch."""
+    token = secrets.token_urlsafe(32)
+    token_hash = sha256(token.encode("utf-8")).hexdigest()
+    with _connect() as conn:
+        with conn.transaction():
+            request = conn.execute(
+                """SELECT id, student_id, new_device_registration_id FROM device_replacement_requests
+                   WHERE id=%s AND status='APPROVED' FOR UPDATE""",
+                [request_id],
+            ).fetchone()
+            if request is None:
+                raise ApiError("REPLACEMENT_NOT_APPROVED", "ICT must approve this device replacement first.", 409)
+            existing = conn.execute(
+                "SELECT id FROM device_activation_tokens WHERE replacement_request_id=%s AND consumed_at IS NULL FOR UPDATE",
+                [request_id],
+            ).fetchone()
+            if existing is not None:
+                conn.execute("DELETE FROM device_activation_tokens WHERE id=%s", [existing["id"]])
+            row = conn.execute(
+                """INSERT INTO device_activation_tokens
+                   (student_id, replacement_request_id, new_device_registration_id, token_hash, issued_by, expires_at)
+                   VALUES (%s, %s, %s, %s, %s, now() + (%s || ' seconds')::interval)
+                   RETURNING expires_at""",
+                [request["student_id"], request_id, request["new_device_registration_id"], token_hash, issued_by, ACTIVATION_QR_TTL_SECONDS],
+            ).fetchone()
+            _audit(conn, request["student_id"], "DEVICE_ACTIVATION_QR_ISSUED", "device_replacement_request", request_id, {"issued_by": issued_by})
+            return {"replacement_request_id": request_id, "qr_payload": f"kiit-device-activate:{token}", "expires_at": row["expires_at"]}
+
+
+def consume_activation_qr(*, student_id: UUID, qr_payload: str) -> dict[str, Any]:
+    prefix = "kiit-device-activate:"
+    if not qr_payload.startswith(prefix):
+        raise ApiError("INVALID_DEVICE_ACTIVATION_QR", "This is not a KIIT device activation QR.", 400)
+    token = qr_payload.removeprefix(prefix)
+    if not token or len(token) > 256:
+        raise ApiError("INVALID_DEVICE_ACTIVATION_QR", "This device activation QR is invalid.", 400)
+    token_hash = sha256(token.encode("utf-8")).hexdigest()
+    with _connect() as conn:
+        with conn.transaction():
+            activation = conn.execute(
+                """SELECT * FROM device_activation_tokens WHERE token_hash=%s FOR UPDATE""",
+                [token_hash],
+            ).fetchone()
+            if activation is None or activation["student_id"] != student_id:
+                raise ApiError("INVALID_DEVICE_ACTIVATION_QR", "This device activation QR is not for this student.", 403)
+            if activation["consumed_at"] is not None:
+                raise ApiError("DEVICE_ACTIVATION_ALREADY_USED", "This device activation QR was already used.", 409)
+            if activation["expires_at"] <= datetime.now(UTC):
+                raise ApiError("DEVICE_ACTIVATION_EXPIRED", "This device activation QR has expired.", 400)
+            request = conn.execute(
+                "SELECT * FROM device_replacement_requests WHERE id=%s AND status='APPROVED' FOR UPDATE",
+                [activation["replacement_request_id"]],
+            ).fetchone()
+            if request is None or request["new_device_registration_id"] != activation["new_device_registration_id"]:
+                raise ApiError("REPLACEMENT_NOT_APPROVED", "The device replacement cannot be activated.", 409)
+            conn.execute("UPDATE device_registrations SET status='REVOKED', revoked_at=now(), updated_at=now() WHERE id=%s AND status='ACTIVE'", [request["old_device_registration_id"]])
+            device = conn.execute(
+                """UPDATE device_registrations SET status='ACTIVE', registered_at=now(), last_seen_at=now(), updated_at=now()
+                   WHERE id=%s AND status='PENDING' RETURNING id, student_id, public_key_algorithm, key_fingerprint,
+                   platform, display_label, status::text AS status, registered_at, revoked_at, last_seen_at,
+                   manufacturer, device_model, os_version, os_api_level, is_physical_device, integrity_status, risk_flags""",
+                [activation["new_device_registration_id"]],
+            ).fetchone()
+            if device is None:
+                raise ApiError("REPLACEMENT_DEVICE_INVALID", "The replacement device is no longer available.", 409)
+            conn.execute("UPDATE device_activation_tokens SET consumed_at=now(), consumed_by_device_registration_id=%s WHERE id=%s", [device["id"], activation["id"]])
+            _audit(conn, student_id, "DEVICE_REPLACEMENT_ACTIVATED", "device_replacement_request", request["id"], {"new_device_registration_id": str(device["id"])})
+            return dict(device)
 
 
 def reject_replacement(*, request_id: UUID, rejected_by: str, decision_note: str) -> dict[str, Any]:
@@ -532,7 +601,7 @@ def current_replacement_request(student_id: UUID) -> dict[str, Any] | None:
             SELECT id, student_id, old_device_registration_id, new_device_registration_id,
                    status::text AS status, reason, requested_at, approved_at
             FROM device_replacement_requests
-            WHERE student_id = %s AND status = 'PENDING'
+            WHERE student_id = %s AND status IN ('PENDING', 'APPROVED')
             ORDER BY requested_at DESC
             LIMIT 1
             """,

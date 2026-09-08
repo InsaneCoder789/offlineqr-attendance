@@ -9,7 +9,7 @@ from backend.app.schemas import BootstrapSyncOut
 
 class BootstrapApiTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.client = TestClient(app)
+        self.client = TestClient(app, headers={"x-student-id": "50000000-0000-4000-8000-000000000001"})
 
     def test_me_uses_development_student(self) -> None:
         response = self.client.get("/api/v1/me")
@@ -24,7 +24,8 @@ class BootstrapApiTest(unittest.TestCase):
         self.assertEqual(payload["sync_version"], 1)
         self.assertEqual(payload["student"]["roll_number"], "DEV24155001")
         self.assertGreaterEqual(len(payload["courses"]), 4)
-        self.assertEqual(len(payload["attendance_records"]), 0)
+        self.assertEqual(len(payload["attendance_records"]), 4)
+        self.assertEqual(len(payload["attendance_summaries"]), 2)
         self.assertTrue(payload["cursor"].startswith("goal02:"))
 
         exposed_rolls = {
@@ -49,7 +50,7 @@ class BootstrapApiTest(unittest.TestCase):
             for record in payload["attendance_records"]
             if record["status"] == "ABSENT"
         ]
-        self.assertEqual(absent_records, [])
+        self.assertEqual(len(absent_records), 1)
         self.assertTrue(all(record["method"] is None for record in absent_records))
 
     def test_student_read_endpoints_are_authorized_projection(self) -> None:
@@ -61,8 +62,11 @@ class BootstrapApiTest(unittest.TestCase):
         self.assertEqual(attendance.status_code, 200)
         self.assertEqual(summary.status_code, 200)
         self.assertGreaterEqual(len(enrollments.json()), 4)
-        self.assertEqual(len(attendance.json()), 0)
-        self.assertEqual(summary.json(), [])
+        self.assertEqual(len(attendance.json()), 4)
+        summaries = {item["course_code"]: item for item in summary.json()}
+        self.assertEqual(set(summaries), {"CN", "DAA"})
+        self.assertEqual(summaries["CN"]["percentage"], 100.0)
+        self.assertEqual(summaries["DAA"]["percentage"], 66.67)
 
     def test_python_validates_shared_bootstrap_fixture(self) -> None:
         fixture_path = Path("shared/fixtures/bootstrap_dev_student.json")

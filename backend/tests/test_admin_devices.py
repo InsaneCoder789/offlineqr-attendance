@@ -20,7 +20,7 @@ from backend.app.redis_service import clear_development_state
 DEV_STUDENT_ID = UUID("50000000-0000-4000-8000-000000000001")
 class AdminDeviceApiTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.client = TestClient(app)
+        self.client = TestClient(app, headers={"x-student-id": str(DEV_STUDENT_ID)})
         clear_development_state()
         with psycopg.connect(get_settings().database_url) as conn:
             conn.execute("DELETE FROM device_replacement_requests")

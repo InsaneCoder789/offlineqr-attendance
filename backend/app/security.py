@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from hashlib import sha256
 from uuid import uuid4
 
 from fastapi import Request
@@ -29,15 +30,29 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 class RedisRateLimitMiddleware(BaseHTTPMiddleware):
     """Distributed request boundary shared by every API worker."""
 
-    protected_prefixes = ("/api/v1/attendance", "/api/v1/devices", "/api/v1/faculty/auth", "/api/v1/admin")
+    protected_prefixes = (
+        "/api/v1/attendance",
+        "/api/v1/devices",
+        "/api/v1/faculty",
+        "/api/v1/student/auth",
+        "/api/v1/admin",
+        "/api/v1/sync",
+        "/api/v1/me",
+    )
 
     async def dispatch(self, request: Request, call_next):
         if not request.url.path.startswith(self.protected_prefixes):
             return await call_next(request)
-        source = request.client.host if request.client else "unknown"
+        source = self._subject(request)
         path = request.url.path
-        scope = "faculty-auth" if path.startswith("/api/v1/faculty/auth") else path.split("/")[3]
-        limit = 12 if scope == "faculty-auth" else 90
+        if path.startswith("/api/v1/faculty/auth"):
+            scope, limit = "faculty-auth", 120
+        elif path.startswith("/api/v1/student/auth"):
+            scope, limit = "student-auth", 120
+        elif path.startswith("/api/v1/attendance"):
+            scope, limit = "attendance", 600
+        else:
+            scope, limit = path.split("/")[3], 180
         try:
             result = consume_rate_limit(scope, source, limit=limit, window_seconds=60)
         except ApiError as exc:
@@ -52,3 +67,13 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
                 headers={"Retry-After": str(result.retry_after_seconds)},
             )
         return await call_next(request)
+
+    @staticmethod
+    def _subject(request: Request) -> str:
+        authorization = request.headers.get("authorization", "")[:512]
+        faculty_session = request.cookies.get("kiit_faculty_session", "")[:256]
+        credential = authorization or faculty_session
+        if credential:
+            return f"session:{sha256(credential.encode('utf-8')).hexdigest()}"
+        source_ip = request.client.host if request.client else "unknown"
+        return f"ip:{source_ip}"

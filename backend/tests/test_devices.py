@@ -40,7 +40,7 @@ def _signature(signing_key: SigningKey, payload: bytes) -> str:
 
 class DeviceApiTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.client = TestClient(app)
+        self.client = TestClient(app, headers={"x-student-id": str(DEV_STUDENT_ID)})
         self._clear_device_state()
 
     def tearDown(self) -> None:
@@ -113,7 +113,7 @@ class DeviceApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["error"]["code"], "ACTIVE_DEVICE_EXISTS")
 
-    def test_device_verification_and_revoked_device(self) -> None:
+    def test_device_verification_and_activation_revokes_old_device(self) -> None:
         device = self._enroll(seed_byte=6)
         key = _signing_key(6)
 
@@ -144,11 +144,24 @@ class DeviceApiTest(unittest.TestCase):
         self.assertTrue(verified.json()["verified"])
 
         replacement = self._request_replacement(seed_byte=7)
-        self.client.post(
+        ict_headers = self._ict_headers()
+        approved = self.client.post(
             f"/api/v1/admin/device-replacements/{replacement['id']}/approve",
             json={"note": "Verified device switch for test coverage."},
-            headers=self._ict_headers(),
+            headers=ict_headers,
         )
+        self.assertEqual(approved.status_code, 200, approved.text)
+        activation = self.client.post(
+            f"/api/v1/admin/device-replacements/{replacement['id']}/activation-qr",
+            headers=ict_headers,
+        )
+        self.assertEqual(activation.status_code, 200, activation.text)
+        consumed = self.client.post(
+            "/api/v1/devices/replacement-activation/consume",
+            json={"qr_payload": activation.json()["qr_payload"]},
+        )
+        self.assertEqual(consumed.status_code, 200, consumed.text)
+
         revoked = self.client.post(
             "/api/v1/devices/verification/challenge",
             json={"device_registration_id": device["id"]},
@@ -156,16 +169,32 @@ class DeviceApiTest(unittest.TestCase):
         self.assertEqual(revoked.status_code, 403)
         self.assertEqual(revoked.json()["error"]["code"], "DEVICE_REVOKED")
 
-    def test_replacement_approval_is_atomic(self) -> None:
+    def test_replacement_activation_is_atomic_and_single_use(self) -> None:
         old = self._enroll(seed_byte=8)
         replacement = self._request_replacement(seed_byte=9)
+        ict_headers = self._ict_headers()
         approved = self.client.post(
             f"/api/v1/admin/device-replacements/{replacement['id']}/approve",
             json={"note": "Verified device switch for test coverage."},
-            headers=self._ict_headers(),
+            headers=ict_headers,
         )
 
         self.assertEqual(approved.status_code, 200)
+        current_before_activation = self.client.get("/api/v1/devices/current").json()
+        self.assertEqual(current_before_activation["id"], old["id"])
+
+        activation = self.client.post(
+            f"/api/v1/admin/device-replacements/{replacement['id']}/activation-qr",
+            headers=ict_headers,
+        )
+        self.assertEqual(activation.status_code, 200, activation.text)
+        qr_payload = activation.json()["qr_payload"]
+        consumed = self.client.post(
+            "/api/v1/devices/replacement-activation/consume",
+            json={"qr_payload": qr_payload},
+        )
+        self.assertEqual(consumed.status_code, 200, consumed.text)
+
         current = self.client.get("/api/v1/devices/current").json()
         self.assertNotEqual(current["id"], old["id"])
         self.assertEqual(current["status"], "ACTIVE")
@@ -180,9 +209,19 @@ class DeviceApiTest(unittest.TestCase):
             ).fetchone()[0]
         self.assertEqual(count, 1)
 
+        replay = self.client.post(
+            "/api/v1/devices/replacement-activation/consume",
+            json={"qr_payload": qr_payload},
+        )
+        self.assertEqual(replay.status_code, 409)
+        self.assertEqual(
+            replay.json()["error"]["code"],
+            "DEVICE_ACTIVATION_ALREADY_USED",
+        )
+
     def test_concurrent_enrollment_cannot_create_two_active_devices(self) -> None:
         def attempt(seed: int) -> int:
-            client = TestClient(app)
+            client = TestClient(app, headers={"x-student-id": str(DEV_STUDENT_ID)})
             challenge = client.post("/api/v1/devices/enrollment/challenge").json()
             key = _signing_key(seed)
             public_key = _public_key(key)

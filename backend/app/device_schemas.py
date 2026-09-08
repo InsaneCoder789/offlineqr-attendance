@@ -102,6 +102,16 @@ class ReplacementRequestOut(BaseModel):
     approved_at: datetime | None
 
 
+class DeviceActivationQrOut(BaseModel):
+    replacement_request_id: UUID
+    qr_payload: str
+    expires_at: datetime
+
+
+class DeviceActivationConsumeIn(BaseModel):
+    qr_payload: str = Field(min_length=32, max_length=512)
+
+
 class AdminDeviceSummaryOut(BaseModel):
     id: UUID
     device_reference: str

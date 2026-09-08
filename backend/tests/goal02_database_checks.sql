@@ -32,7 +32,7 @@ BEGIN
     JOIN attendance_sessions sess ON sess.id = ar.attendance_session_id
     WHERE ar.student_id = dev_student
       AND sess.course_offering_id = '60000000-0000-4000-8000-000000000001'
-      AND sess.state = 'CLOSED';
+      AND sess.state IN ('CLOSED', 'RECONCILED');
 
     IF daa_total != 3 OR daa_present != 2 THEN
         RAISE EXCEPTION 'unexpected DAA attendance counts: total %, present %', daa_total, daa_present;
@@ -72,4 +72,3 @@ EXCEPTION
     WHEN unique_violation THEN
         NULL;
 END $$;
-

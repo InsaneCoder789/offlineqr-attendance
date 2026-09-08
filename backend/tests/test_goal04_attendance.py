@@ -4,6 +4,7 @@ import unittest
 from datetime import timedelta
 from uuid import UUID
 
+import psycopg
 from fastapi.testclient import TestClient
 
 from backend.app.attendance_protocol import (
@@ -13,6 +14,7 @@ from backend.app.attendance_protocol import (
     verify,
 )
 from backend.app.attendance_service import qr_payload_for, start_attendance_session
+from backend.app.config import get_settings
 from backend.app.main import app
 
 DEV_FACULTY_ID = UUID("40000000-0000-4000-8000-000000000001")
@@ -20,7 +22,7 @@ DEV_FACULTY_ID = UUID("40000000-0000-4000-8000-000000000001")
 
 class Goal04AttendanceApiTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.client = TestClient(app)
+        self.client = TestClient(app, headers={"x-faculty-id": str(DEV_FACULTY_ID)})
 
     def test_faculty_sees_only_assigned_today_classes(self) -> None:
         response = self.client.get("/api/v1/faculty/classes/today")
@@ -165,6 +167,20 @@ class Goal04AttendanceApiTest(unittest.TestCase):
         self.assertEqual(qr.status_code, 409)
         self.assertEqual(qr.json()["error"]["code"], "SESSION_CLOSED")
 
+    def test_qr_payload_requires_the_assigned_faculty_session(self) -> None:
+        offering_id = self._today_offering_id()
+        session = self.client.post(
+            "/api/v1/faculty/attendance-sessions/start",
+            json={"course_offering_id": offering_id},
+        ).json()
+
+        anonymous = TestClient(app).get(
+            f"/api/v1/faculty/attendance-sessions/{session['id']}/qr"
+        )
+
+        self.assertEqual(anonymous.status_code, 401)
+        self.assertEqual(anonymous.json()["error"]["code"], "FACULTY_AUTH_REQUIRED")
+
     def _today_offering_id(self) -> str:
         response = self.client.get("/api/v1/faculty/classes/today")
         self.assertEqual(response.status_code, 200)
@@ -173,18 +189,24 @@ class Goal04AttendanceApiTest(unittest.TestCase):
         return classes[0]["course_offering_id"]
 
     def _unauthorized_offering_id(self) -> str:
-        response = self.client.get("/api/v1/sync/bootstrap")
-        self.assertEqual(response.status_code, 200)
-        student_offerings = {
-            item["id"] for item in response.json()["course_offerings"]
-        }
-        faculty_offerings = {
-            row["course_offering_id"]
-            for row in self.client.get("/api/v1/faculty/classes/today").json()
-        }
-        unauthorized = sorted(student_offerings - faculty_offerings)
-        self.assertTrue(unauthorized)
-        return unauthorized[0]
+        with psycopg.connect(get_settings().database_url) as conn:
+            row = conn.execute(
+                """
+                SELECT co.id
+                FROM course_offerings co
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM faculty_assignments fa
+                    WHERE fa.course_offering_id = co.id
+                      AND fa.faculty_id = %s
+                      AND fa.active = true
+                )
+                ORDER BY co.id
+                LIMIT 1
+                """,
+                [DEV_FACULTY_ID],
+            ).fetchone()
+        self.assertIsNotNone(row)
+        return str(row[0])
 
 
 if __name__ == "__main__":

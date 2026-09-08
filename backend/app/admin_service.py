@@ -20,7 +20,7 @@ def admin_device_stats() -> dict[str, int]:
               COUNT(*) FILTER (WHERE status = 'ACTIVE')::int AS active_devices,
               COUNT(*) FILTER (WHERE status = 'REVOKED')::int AS revoked_devices,
               COUNT(*) FILTER (WHERE integrity_status IN ('REVIEW_REQUIRED', 'REJECTED'))::int AS review_required,
-              (SELECT COUNT(*)::int FROM device_replacement_requests WHERE status = 'PENDING') AS pending_replacements
+              (SELECT COUNT(*)::int FROM device_replacement_requests WHERE status IN ('PENDING', 'APPROVED')) AS pending_replacements
             FROM device_registrations
             """
         ).fetchone()
@@ -140,7 +140,7 @@ def admin_pending_replacements() -> list[dict[str, Any]]:
             """
             SELECT r.id, r.student_id, s.roll_number, s.display_name AS student_name,
                    r.old_device_registration_id, r.new_device_registration_id,
-                   r.reason, r.requested_at,
+                   r.reason, r.status::text AS status, r.requested_at,
                    old_device.platform AS old_platform, old_device.manufacturer AS old_manufacturer,
                    old_device.device_model AS old_model,
                    new_device.platform AS new_platform, new_device.manufacturer AS new_manufacturer,
@@ -150,7 +150,7 @@ def admin_pending_replacements() -> list[dict[str, Any]]:
             JOIN students s ON s.id = r.student_id
             JOIN device_registrations old_device ON old_device.id = r.old_device_registration_id
             JOIN device_registrations new_device ON new_device.id = r.new_device_registration_id
-            WHERE r.status = 'PENDING'
+            WHERE r.status IN ('PENDING', 'APPROVED')
             ORDER BY r.requested_at ASC
             """
         ).fetchall()

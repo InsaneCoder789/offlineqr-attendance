@@ -56,6 +56,7 @@ from .faculty_identity_service import (
     faculty_profile,
     update_faculty_profile,
 )
+from .student_identity_service import authenticate_student, change_student_password, reset_student_password_by_roll
 from .device_schemas import (
     AdminDecisionIn,
     AdminDeviceDetailOut,
@@ -63,6 +64,8 @@ from .device_schemas import (
     AdminDeviceStatsOut,
     AdminDeviceSummaryOut,
     AdminRevokeIn,
+    DeviceActivationConsumeIn,
+    DeviceActivationQrOut,
     DeviceChallengeOut,
     DeviceRegistrationOut,
     DeviceVerificationOut,
@@ -76,6 +79,8 @@ from .device_service import (
     approve_replacement,
     complete_enrollment,
     complete_verification,
+    consume_activation_qr,
+    create_activation_qr,
     create_enrollment_challenge,
     create_replacement_challenge,
     create_verification_challenge,
@@ -94,7 +99,7 @@ from .admin_service import (
 )
 from .errors import ApiError, api_error_handler
 from .repositories import bootstrap_student_sync, get_faculty_by_identity, get_student, get_student_by_email
-from .redis_service import assert_available, faculty_session, publish_session_event, revoke_faculty_session, session_event_version
+from .redis_service import assert_available, faculty_session, publish_session_event, revoke_faculty_session, session_event_version, student_session
 from .security import RedisRateLimitMiddleware, SecurityHeadersMiddleware
 from .schemas import (
     AttendanceRecordOut,
@@ -103,6 +108,10 @@ from .schemas import (
     DevLoginIn,
     EnrollmentOut,
     StudentOut,
+    StudentLoginIn,
+    StudentLoginOut,
+    StudentPasswordChangeIn,
+    StudentPasswordResetOut,
 )
 
 @asynccontextmanager
@@ -128,7 +137,7 @@ app.add_middleware(
     allow_origin_regex=(r"http://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+):\d+" if settings.development_enabled else None),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
-    allow_headers=["Content-Type", "X-CSRF-Token", "X-Correlation-Id"],
+    allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Correlation-Id"],
 )
 logger = logging.getLogger("kiit_attendance.sync")
 
@@ -149,8 +158,8 @@ def _faculty_id_from_request(request: Request) -> UUID:
             if not supplied_csrf or not secrets.compare_digest(supplied_csrf, session["csrf"]):
                 raise ApiError("CSRF_VALIDATION_FAILED", "Request could not be verified.", 403)
         return UUID(session["faculty_id"])
-    if get_settings().development_enabled:
-        identity = request.headers.get("x-faculty-id") or get_settings().dev_faculty_id
+    if get_settings().development_enabled and request.headers.get("x-faculty-id"):
+        identity = request.headers["x-faculty-id"]
         faculty = get_faculty_by_identity(identity)
         return faculty["id"]
     raise ApiError("FACULTY_AUTH_REQUIRED", "Faculty sign-in is required.", 401)
@@ -173,8 +182,21 @@ def _websocket_origin_allowed(origin: str | None) -> bool:
 
 
 def _student_id_from_request(request: Request) -> UUID:
-    _require_development_identity()
-    return UUID(request.headers.get("x-student-id") or get_settings().dev_student_id)
+    authorization = request.headers.get("authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() == "bearer" and token:
+        session = student_session(token)
+        if session is None:
+            raise ApiError("STUDENT_SESSION_EXPIRED", "Student sign-in has expired. Sign in again.", 401)
+        try:
+            if session.get("must_change_password") is True and not request.url.path.endswith("/student/auth/password"):
+                raise ApiError("STUDENT_PASSWORD_CHANGE_REQUIRED", "Change the temporary password before using attendance services.", 403)
+            return UUID(session["student_id"])
+        except (ValueError, KeyError) as exc:
+            raise ApiError("STUDENT_SESSION_EXPIRED", "Student sign-in is invalid.", 401) from exc
+    if get_settings().development_enabled and request.headers.get("x-student-id"):
+        return UUID(request.headers["x-student-id"])
+    raise ApiError("STUDENT_AUTH_REQUIRED", "Student sign-in is required.", 401)
 
 
 @app.get("/api/v1/health")
@@ -183,10 +205,8 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/v1/me", response_model=StudentOut)
-def me() -> dict:
-    settings = get_settings()
-    _require_development_identity()
-    return get_student(UUID(settings.dev_student_id))
+def me(request: Request) -> dict:
+    return get_student(_student_id_from_request(request))
 
 
 @app.post("/api/v1/auth/dev-login", response_model=BootstrapSyncOut)
@@ -194,6 +214,18 @@ def dev_login(payload: DevLoginIn) -> dict:
     _require_development_identity()
     student = get_student_by_email(payload.email)
     return bootstrap_student_sync(student["id"])
+
+
+@app.post("/api/v1/student/auth/login", response_model=StudentLoginOut)
+def student_login(payload: StudentLoginIn) -> dict:
+    profile, token = authenticate_student(payload.roll_number, payload.password)
+    return {**profile, "access_token": token, "expires_in": get_settings().student_session_ttl_seconds}
+
+
+@app.post("/api/v1/student/auth/password")
+def student_change_password(payload: StudentPasswordChangeIn, request: Request) -> dict:
+    change_student_password(_student_id_from_request(request), payload.current_password, payload.new_password)
+    return {"result": "password_changed"}
 
 
 @app.post("/api/v1/faculty/auth/login", response_model=FacultyLoginOut)
@@ -243,24 +275,28 @@ def faculty_update_profile(payload: FacultyProfileUpdateIn, request: Request) ->
 
 
 @app.post("/api/v1/faculty/auth/password")
-def faculty_change_password(payload: FacultyPasswordChangeIn, request: Request) -> dict:
+def faculty_change_password(
+    payload: FacultyPasswordChangeIn,
+    request: Request,
+    response: Response,
+) -> dict:
     change_faculty_password(_faculty_id_from_request(request), payload.current_password, payload.new_password)
+    response.delete_cookie("kiit_faculty_session", path="/")
+    response.delete_cookie("kiit_faculty_csrf", path="/")
     return {"result": "password_changed"}
 
 
 @app.get("/api/v1/sync/bootstrap", response_model=BootstrapSyncOut)
 def sync_bootstrap(request: Request) -> dict:
-    settings = get_settings()
-    _require_development_identity()
-    student_id = request.headers.get("x-student-id") or settings.dev_student_id
+    student_id = _student_id_from_request(request)
     started = perf_counter()
-    payload = bootstrap_student_sync(UUID(student_id))
+    payload = bootstrap_student_sync(student_id)
     duration_ms = round((perf_counter() - started) * 1000, 2)
     logger.info(
         "bootstrap_sync",
         extra={
             "sync_version": payload["sync_version"],
-            "student_id": student_id,
+            "student_id": str(student_id),
             "record_count": len(payload["attendance_records"]),
             "duration_ms": duration_ms,
             "result": "ok",
@@ -270,24 +306,18 @@ def sync_bootstrap(request: Request) -> dict:
 
 
 @app.get("/api/v1/me/enrollments", response_model=list[EnrollmentOut])
-def my_enrollments() -> list[dict]:
-    settings = get_settings()
-    _require_development_identity()
-    return bootstrap_student_sync(UUID(settings.dev_student_id))["enrollments"]
+def my_enrollments(request: Request) -> list[dict]:
+    return bootstrap_student_sync(_student_id_from_request(request))["enrollments"]
 
 
 @app.get("/api/v1/me/attendance", response_model=list[AttendanceRecordOut])
-def my_attendance() -> list[dict]:
-    settings = get_settings()
-    _require_development_identity()
-    return bootstrap_student_sync(UUID(settings.dev_student_id))["attendance_records"]
+def my_attendance(request: Request) -> list[dict]:
+    return bootstrap_student_sync(_student_id_from_request(request))["attendance_records"]
 
 
 @app.get("/api/v1/me/attendance/summary", response_model=list[AttendanceSummaryOut])
-def my_attendance_summary() -> list[dict]:
-    settings = get_settings()
-    _require_development_identity()
-    return bootstrap_student_sync(UUID(settings.dev_student_id))["attendance_summaries"]
+def my_attendance_summary(request: Request) -> list[dict]:
+    return bootstrap_student_sync(_student_id_from_request(request))["attendance_summaries"]
 
 
 @app.get("/api/v1/trust-roots/current", response_model=TrustRootOut)
@@ -296,10 +326,8 @@ def current_trust_root() -> dict:
 
 
 @app.get("/api/v1/me/timetable", response_model=list[TimetableEntryOut])
-def my_timetable() -> list[dict]:
-    settings = get_settings()
-    _require_development_identity()
-    return student_timetable(UUID(settings.dev_student_id))
+def my_timetable(request: Request) -> list[dict]:
+    return student_timetable(_student_id_from_request(request))
 
 
 @app.get("/api/v1/faculty/classes/today", response_model=list[FacultyClassOut])
@@ -361,7 +389,8 @@ def faculty_attest(session_id: UUID, payload: FacultyAttestationIn, request: Req
 
 
 @app.get("/api/v1/faculty/attendance-sessions/{session_id}/qr", response_model=QrPayloadOut)
-def faculty_session_qr(session_id: UUID) -> dict:
+def faculty_session_qr(session_id: UUID, request: Request) -> dict:
+    get_faculty_session(_faculty_id_from_request(request), session_id)
     return qr_payload_for(session_id)
 
 
@@ -519,6 +548,11 @@ def device_replacement_current(request: Request) -> dict | None:
     return current_replacement_request(_student_id_from_request(request))
 
 
+@app.post("/api/v1/devices/replacement-activation/consume", response_model=DeviceRegistrationOut)
+def device_replacement_activation_consume(payload: DeviceActivationConsumeIn, request: Request) -> dict:
+    return consume_activation_qr(student_id=_student_id_from_request(request), qr_payload=payload.qr_payload)
+
+
 @app.get("/api/v1/admin/device-stats", response_model=AdminDeviceStatsOut)
 def admin_device_statistics(request: Request) -> dict:
     _ict_admin_from_request(request)
@@ -555,6 +589,12 @@ def admin_replacement_approve(request_id: UUID, payload: AdminDecisionIn, reques
     return approve_replacement(request_id=request_id, approved_by=profile["institutional_email"], decision_note=payload.note)
 
 
+@app.post("/api/v1/admin/device-replacements/{request_id}/activation-qr", response_model=DeviceActivationQrOut)
+def admin_replacement_activation_qr(request_id: UUID, request: Request) -> dict:
+    _, profile = _ict_admin_from_request(request)
+    return create_activation_qr(request_id=request_id, issued_by=profile["institutional_email"])
+
+
 @app.post("/api/v1/admin/device-replacements/{request_id}/reject", response_model=ReplacementRequestOut)
 def admin_replacement_reject(request_id: UUID, payload: AdminDecisionIn, request: Request) -> dict:
     _, profile = _ict_admin_from_request(request)
@@ -565,3 +605,10 @@ def admin_replacement_reject(request_id: UUID, payload: AdminDecisionIn, request
 def admin_device_revoke(device_registration_id: UUID, payload: AdminRevokeIn, request: Request) -> dict:
     _, profile = _ict_admin_from_request(request)
     return revoke_device(device_registration_id=device_registration_id, revoked_by=profile["institutional_email"], reason=payload.reason)
+
+
+@app.post("/api/v1/admin/students/{roll_number}/password-reset", response_model=StudentPasswordResetOut)
+def admin_student_password_reset(roll_number: str, request: Request) -> dict:
+    _, profile = _ict_admin_from_request(request)
+    temporary_password = reset_student_password_by_roll(roll_number, profile["institutional_email"])
+    return {"temporary_password": temporary_password}

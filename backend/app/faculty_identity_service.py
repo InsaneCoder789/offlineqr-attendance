@@ -11,7 +11,7 @@ from psycopg.rows import dict_row
 
 from .config import get_settings
 from .errors import ApiError
-from .redis_service import create_faculty_session
+from .redis_service import create_faculty_session, revoke_faculty_sessions
 
 
 _PASSWORD_HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2)
@@ -141,6 +141,7 @@ def change_faculty_password(faculty_id: UUID, current_password: str, new_passwor
                 """,
                 [_PASSWORD_HASHER.hash(new_password), faculty_id],
             )
+            revoke_faculty_sessions(faculty_id)
 
 
 def _profile(row: dict) -> dict:
