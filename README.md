@@ -1,144 +1,192 @@
 <div align="center">
 
-![OfflineQR Attendance banner](assets/offlineqr-showcase-banner.svg)
+![OfflineQR Attendance product ecosystem](assets/offlineqr-readme-banner.png)
 
 # OfflineQR Attendance
 
 ### Dynamic QR Based Offline Attendance System for Institutions
 
-![Platform](https://img.shields.io/badge/platform-Flutter%20%7C%20Next.js%20%7C%20FastAPI-159A53?style=for-the-badge)
-![Protocol](https://img.shields.io/badge/protocol-Signed%20QR%20%7C%20Offline--First-0B6F3A?style=for-the-badge)
-![CI](https://img.shields.io/badge/CI-Backend%20%7C%20Portal%20%7C%20App%20%7C%20Containers-1F8F55?style=for-the-badge)
+[![Backend Tests](https://github.com/InsaneCoder789/offlineqr-attendance/actions/workflows/backend-tests.yml/badge.svg)](https://github.com/InsaneCoder789/offlineqr-attendance/actions/workflows/backend-tests.yml)
+[![Database Contract](https://github.com/InsaneCoder789/offlineqr-attendance/actions/workflows/database-contract.yml/badge.svg)](https://github.com/InsaneCoder789/offlineqr-attendance/actions/workflows/database-contract.yml)
+[![Faculty Portal](https://github.com/InsaneCoder789/offlineqr-attendance/actions/workflows/faculty-build.yml/badge.svg)](https://github.com/InsaneCoder789/offlineqr-attendance/actions/workflows/faculty-build.yml)
+[![Mobile Tests](https://github.com/InsaneCoder789/offlineqr-attendance/actions/workflows/mobile-tests.yml/badge.svg)](https://github.com/InsaneCoder789/offlineqr-attendance/actions/workflows/mobile-tests.yml)
+[![Android Build](https://github.com/InsaneCoder789/offlineqr-attendance/actions/workflows/android-build.yml/badge.svg)](https://github.com/InsaneCoder789/offlineqr-attendance/actions/workflows/android-build.yml)
+
+**Capture locally. Sign on the registered device. Synchronize when reachable. Verify centrally.**
 
 </div>
 
-## Overview
+## What It Is
 
-OfflineQR Attendance is an offline-first classroom attendance platform. It combines a Flutter student app, a Next.js faculty portal, an ICT device-governance console, and a FastAPI/PostgreSQL/Redis backend.
+OfflineQR Attendance is an offline-first attendance ecosystem for educational institutions. It combines a Flutter student application, a Next.js faculty portal, an ICT device-governance console, and a FastAPI backend backed by PostgreSQL and Redis.
 
-The operating principle is simple: **capture locally, sign cryptographically, store durably, synchronize when reachable, and verify centrally.** Internet connectivity improves reconciliation and reporting, but it is not required for a student device to capture a valid attendance proof.
+The classroom workflow does not stop when Internet access disappears. A student can scan a valid classroom QR, create a device-signed proof, and preserve it in a durable local outbox. When connectivity returns, the backend re-verifies the proof and the faculty roster reflects the accepted attendance.
 
-## Delivery Status
+The system is designed to be **proxy-resistant, device-bound, tamper-evident, auditable, and resilient**. It does not claim that software can prevent physical collusion when one student deliberately hands another student their registered phone.
 
-### Implemented and Verified
+## Product Surfaces
 
-- Flutter student experience: KIIT-email development login, timetable, attendance summary, in-app scanner, attendance logger, device status, and KIIT portal shortcuts.
-- Dynamic attendance sessions: faculty starts a course/section session, the QR payload rotates every 5 seconds, and each valid scan receives a 60-second proof-creation window.
-- Signed proof pipeline: Ed25519 device identity, signed attendance proof, local SQLite outbox, retry/backoff, batch synchronization, idempotency, reconciliation, and faculty roster polling.
-- Device binding and governance: one active device per student, challenge-response enrollment, revocation, audited replacement requests, ICT approval/rejection, device history, and emulator-declaration rejection.
-- Faculty identity: `@kiit.ac.in` accounts use Argon2id password hashes, server-owned HTTP-only sessions, CSRF validation, login lockout, forced first-password change, and editable name/phone profile fields.
-- Faculty portal: dedicated Next.js pages for login, dashboard, classes, live attendance, records, settings, projector mode, and ICT device governance.
-- Redis coordination: shared request limits, device-challenge throttling, opaque faculty-session storage, and attendance-session update publication across API workers.
-- Faculty provisioning: the restricted local onboarding register imports the validated staff identities, designation, and organisational unit; the official assignment/timetable import remains intentionally blocked on source data.
-- Controlled fallback: faculty manual attestation records the reason and attendance method separately from normal QR capture.
-- Quality gates: backend protocol/database tests, Flutter static and unit tests, faculty portal tests/build/audit, and backend/faculty Docker image builds.
+| Surface | Purpose | Core capabilities |
+| --- | --- | --- |
+| Student app | Capture and understand attendance | Timetable, course attendance, secure in-app scanner, offline logger, device status, KIIT portal shortcuts |
+| Faculty portal | Operate classroom sessions | Today's classes, dynamic QR, live roster, projector mode, manual attestation, records and reconciliation |
+| ICT portal | Govern identity and devices | Device inventory, replacement approval, one-time activation, revocation, password recovery and audit history |
+| Backend | Enforce institutional truth | Authentication, eligibility, signatures, duplicates, session lifecycle, synchronization and reporting |
 
-### Deferred Until Official Academic Data Is Available
-
-- Faculty initialization and real per-faculty class access. This needs an authoritative import covering faculty identity, course offering, section, room, timetable, and enrolled-student roster.
-- Student/faculty provisioning from KIIT systems rather than the present demonstration seed data.
-
-## Architecture
+## System Architecture
 
 ```mermaid
 flowchart LR
-    Student[Flutter Student App] -->|Scan within QR epoch| Proof[Signed Attendance Proof]
-    Proof --> Local[(Encrypted key + local SQLite outbox)]
-    Local -->|Retry when backend is reachable| API[FastAPI API]
-    Faculty[Next.js Faculty Portal] -->|Create and host session| API
-    API --> DB[(PostgreSQL Authority)]
-    API --> Redis[(Redis Coordination)]
-    API -->|Roster polling| Faculty
-    ICT[ICT Device Governance Console] -->|Approve, reject, revoke| API
-    DB --> Audit[Audit Trail and Attendance Records]
+    subgraph Classroom
+        F[Faculty Portal]
+        S[Student App]
+        Q[5-second Signed QR]
+        L[(Local Proof Outbox)]
+        F --> Q
+        Q --> S
+        S --> L
+    end
+
+    subgraph Institution
+        API[FastAPI Services]
+        R[(Redis Coordination)]
+        DB[(PostgreSQL Authority)]
+        ICT[ICT Governance Portal]
+        API <--> R
+        API <--> DB
+        ICT --> API
+    end
+
+    F <--> API
+    L -->|Immediate or retried sync| API
+    API -->|Live roster updates| F
 ```
+
+### Technology Stack
+
+| Layer | Technology |
+| --- | --- |
+| Mobile | Flutter, Dart, SQLite, platform secure storage |
+| Faculty and ICT web | Next.js App Router, React, TypeScript |
+| API | FastAPI, Python |
+| Durable authority | PostgreSQL |
+| Shared coordination | Redis |
+| Cryptography | Ed25519 signatures, Argon2id password hashing |
+| Delivery | Docker, GHCR, independent GitHub Actions workflows |
 
 ## Attendance Protocol
 
 ```mermaid
 sequenceDiagram
+    autonumber
     participant F as Faculty Portal
-    participant S as Student App
-    participant L as Student Local Store
     participant B as Backend
+    participant S as Student App
+    participant L as Local Outbox
 
-    F->>B: Start course/section attendance session
-    B-->>F: Signed QR payload for epoch N
-    F->>F: Rotate QR every 5 seconds
-    S->>S: Scan QR inside the app
-    S->>S: Validate QR, eligibility, device, and claim window
-    S->>L: Create and store signed proof first
+    F->>B: Start assigned class session
+    B-->>F: Signed challenge for QR epoch N
+    F->>F: Display and rotate QR every 5 seconds
+    S->>S: Scan inside the registered app
+    S->>S: Verify signature, epoch and eligibility context
+    S->>L: Store device-signed proof atomically
     alt Backend reachable
-        S->>B: Submit proof immediately
-    else Backend unreachable
-        L->>L: Queue proof with retry/backoff
-        L->>B: Submit when connectivity returns
+        L->>B: Submit proof immediately
+    else Backend unavailable
+        L->>L: Preserve proof and schedule retry
+        L->>B: Submit after connectivity returns
     end
-    B->>B: Re-verify signature, device, session, eligibility, and duplicates
-    B-->>F: Roster reflects accepted attendance
+    B->>B: Re-verify session, student, device, timing and replay rules
+    B-->>F: Publish accepted roster update
 ```
 
-### QR and Claim Rules
+### Timing Model
 
-- A faculty session produces a signed QR challenge every 5 seconds.
-- A QR must be scanned during its short epoch; stale screenshots are rejected.
-- A successful scan opens a bounded 60-second claim window for signing and durable local capture.
-- The student app records the QR data and signature locally before attempting transport.
-- The backend enforces one academic attendance record per `(session, student)` and one device representation per session.
-- QR payload timestamps use one canonical UTC representation, preventing signature failures caused by time-zone serialization differences.
+- The classroom QR changes every **5 seconds**.
+- The QR must be scanned during its valid epoch; an unscanned stale image expires.
+- A valid scan establishes a bounded **60-second claim window** so signing and durable storage do not need to finish inside five seconds.
+- The QR contains session challenge data, never public student identity data.
+- The backend enforces one attendance result per `(session, student)` and one active student identity per registered attendance device.
+- Canonical UTC serialization is shared across Dart, TypeScript, and Python to prevent signature drift.
 
-## Offline Reconciliation
+## Offline-First Reconciliation
 
-The mobile app maintains local academic data, attendance logs, signed proofs, and an outbox. While the app is in the foreground it polls for backend availability every five seconds; a recovered connection prioritizes pending proofs, retries with bounded backoff, then refreshes the local attendance view.
+```mermaid
+stateDiagram-v2
+    [*] --> Captured: Valid QR scanned
+    Captured --> ProofReady: Device signs proof
+    ProofReady --> PendingSync: Stored locally first
+    PendingSync --> Submitting: Backend reachable
+    Submitting --> ServerAccepted: Verification succeeds
+    Submitting --> PendingSync: Transport interruption
+    Submitting --> NeedsReview: Permanent protocol rejection
+    ServerAccepted --> Reconciled: Local projection refreshed
+```
 
-Valid offline proofs remain eligible for server verification even when the faculty has subsequently closed the visible session, provided they were captured within the permitted signed-QR claim window. Faculty roster polling reflects the accepted record after reconciliation.
+The student app keeps synchronized academic data, attendance records, scan history, signed proofs, and a durable outbox locally. Foreground connectivity polling prioritizes pending attendance proofs as soon as the backend becomes reachable. Retries use bounded backoff and idempotent proof identifiers.
 
-## Device Governance
+A faculty member may close the visible classroom session before an offline student reconnects. The backend can still accept a proof captured during the valid signed-QR window; session closure does not erase valid evidence created earlier.
+
+## Device-Bound Identity
+
+Each student account may have one active attendance device. Enrollment generates an Ed25519 key pair on the phone, retains the private credential in platform secure storage, and registers only the public credential and privacy-minimized device facts with the backend.
 
 ```mermaid
 flowchart TD
-    Login[Student identity resolved] --> Challenge[Server creates single-use challenge]
-    Challenge --> Key[Phone signs challenge with local Ed25519 key]
-    Key --> Binding[One active device binding]
-    Binding --> Scan[Can sign attendance proofs]
-    NewPhone[New phone] --> Request[Replacement request]
-    Request --> ICT[ICT review and audit decision]
-    ICT -->|Approve| Revoke[Old binding revoked]
-    Revoke --> Activate[New binding activated]
-    ICT -->|Reject| Deny[New binding remains inactive]
+    A[Authenticated student] --> C[Single-use enrollment challenge]
+    C --> K[Phone generates key and signs challenge]
+    K --> D[Active device binding]
+    D --> P[Attendance proofs permitted]
+
+    N[Replacement phone] --> R[Student replacement request]
+    R --> I[ICT review]
+    I -->|Reject| X[Existing binding remains active]
+    I -->|Approve| T[One-time activation QR]
+    T --> V[New phone proves its key]
+    V --> W[Atomic switch: new active, old revoked]
 ```
 
-The registry stores privacy-minimized review facts such as platform, manufacturer, model, OS version, and a generated device reference. It deliberately does **not** store MAC addresses, IMEI, advertising IDs, serial numbers, or precise location.
+The replacement approval alone does not revoke the working phone. Revocation occurs atomically only after the approved activation is consumed by the new device. Activation tokens are short-lived, single-use, hashed at rest, and audited.
 
-The current app rejects an emulator declaration, but client-reported device facts are not sufficient evidence against a determined attacker. A production deployment must add platform attestation before treating “physical device” as trusted.
+The registry deliberately avoids MAC addresses, IMEI, advertising identifiers, serial numbers, and precise GPS location. Manufacturer, model, platform, OS version, and emulator declaration are review signals rather than cryptographic identity. Production device-integrity enforcement still requires Play Integrity and Apple App Attest or DeviceCheck.
 
-## Faculty and ICT Portals
+## Faculty Operations
 
-### Faculty Portal
+The faculty portal is organized into dedicated routes rather than one oversized client page:
 
-- Dashboard with today’s classes, next class, session state, and quick attendance start.
-- Live attendance with a rotating QR, countdown, present count, roster search/filtering, manual attestation, and projector display.
-- Course/session records with reconciliation status and attendance registers.
-- Faculty-scoped data is implemented at the data/API boundary; a production directory and class import are still required before real faculty onboarding.
+- **Dashboard:** today's teaching plan, next class, quick attendance start, completed sessions, and synchronization state.
+- **My Classes:** assigned course offerings and section context.
+- **Live Attendance:** signed rotating QR, countdown, present count, searchable roster, attestation, and session controls.
+- **Projector Mode:** high-contrast classroom QR presentation without administrative clutter.
+- **Records:** course and session history, attendance registers, reconciliation state, and risk visibility.
+- **Settings:** faculty profile and controlled credential change.
 
-### ICT Device Governance
+Faculty access is scoped at the API and database boundary. Real institutional use requires an authoritative faculty-course-section assignment import; the repository's seeded identities are development data only.
 
-- Device inventory and lifecycle visibility.
-- Pending replacement review with an auditable decision note.
-- Device-level history and explicit revocation.
-- An `ICT_ADMIN` database role is required for device inventory, approval, rejection, and revocation. The browser does not hold an ICT approval key; the approver is derived from the authenticated server session.
+## Security Boundaries
+
+- Argon2id password hashes, failed-login lockout, forced initial password change, and server-managed sessions.
+- Opaque student and faculty sessions stored in Redis with revocation after credential changes.
+- CSRF validation and HTTP-only session handling for browser operations.
+- Ed25519 signatures for attendance-device enrollment and attendance proofs.
+- Server-side course, section, session, roster, device and duplicate validation.
+- Redis-backed distributed request limits and shared session coordination across API workers.
+- PostgreSQL uniqueness constraints and append-oriented audit events for authoritative actions.
+- QR replay, stale epoch, revoked device, wrong enrollment and duplicate proof rejection.
+- No passwords, private keys, confidential spreadsheets or onboarding registers committed to Git.
 
 ## Repository Layout
 
 ```text
-backend/                 FastAPI domain, attendance, device, sync, and admin services
-backend/migrations/      PostgreSQL schema migrations through device governance
-backend/tests/           Protocol, database, device, sync, and admin API tests
-client/                  Flutter student app and local-first SQLite data store
-faculty-portal/          Next.js App Router faculty and ICT portal
-shared/fixtures/         Cross-platform signed protocol test vectors
-scripts/                 Database reset and database-boundary checks
-.github/workflows/       CI and tag-triggered container release workflows
+backend/                 FastAPI routes, domain services and security controls
+backend/migrations/      PostgreSQL schema and lifecycle migrations
+backend/tests/           API, protocol, database, identity and device tests
+client/                  Flutter student app and offline-first local store
+faculty-portal/          Next.js faculty and ICT portal
+shared/fixtures/         Cross-platform cryptographic protocol vectors
+scripts/                 Database, import and verification utilities
+.github/workflows/       Ten independent CI checks and release publishing
+assets/                  Public repository artwork
 ```
 
 ## Local Development
@@ -149,30 +197,27 @@ scripts/                 Database reset and database-boundary checks
 - Redis 7
 - Python 3.11
 - Node.js 22
-- Flutter 3.35.4
+- Flutter 3.47.2
 
-### Prepare Demo Data
+### 1. Prepare the Database
 
 ```bash
+export DATABASE_URL=postgresql://localhost/kiit_attendance_goal02
 ./scripts/db_reset.sh
 ```
 
-### Import Faculty Identities
+This command applies the migrations and development seed. Do not use the reset script against an institutional or production database.
 
-The supplied staff workbook is filtered to valid `@kiit.ac.in` addresses. The generated credential register is intentionally ignored by Git and must be distributed through an approved restricted channel. The importer stores only Argon2id password hashes; it does not import personal email or mobile data.
-
-```bash
-PYTHONPATH=. python scripts/import_faculty_identities.py --manifest /restricted/faculty-manifest.json --result /restricted/import-result.json
-```
-
-### Run the Backend
+### 2. Start the Backend
 
 ```bash
-cd backend
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+source .venv/bin/activate
+uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Run the Faculty Portal
+Set `REDIS_URL` and use `REDIS_REQUIRED=true` whenever distributed coordination is required.
+
+### 3. Start the Faculty Portal
 
 ```bash
 cd faculty-portal
@@ -182,44 +227,48 @@ npm run dev
 
 Open `http://127.0.0.1:5173`.
 
-### Run the Student App
+### 4. Start the Student App
 
 ```bash
 cd client
 flutter pub get
-flutter run --dart-define=API_BASE_URL=http://YOUR_LAN_HOST:8000
+flutter run --dart-define=API_BASE_URL=http://YOUR_HOST:8000
 ```
 
-For the Android emulator, use `http://10.0.2.2:8000`. A physical phone must use the host machine’s reachable LAN address; `127.0.0.1` points to the phone itself.
+Use `http://10.0.2.2:8000` from the Android emulator. A physical phone must use the development machine's reachable LAN address; `127.0.0.1` on the phone refers to the phone itself.
 
-## Quality Gates
+## Independent Quality Gates
 
-The continuous-integration workflow validates:
+GitHub displays each boundary as a separate workflow, so one failure cannot hide unrelated results behind a skipped job.
 
-| Boundary | Validation |
+| Workflow | Boundary |
 | --- | --- |
-| Backend | PostgreSQL migrations, Redis coordination, database assertions, 42 protocol/API tests, dependency audit |
-| Faculty portal | Unit tests, TypeScript production build, dependency audit |
-| Student app | `flutter analyze` and Flutter tests |
-| Containers | Backend and faculty production-image builds |
+| Backend Tests | FastAPI protocol and service behavior with PostgreSQL and Redis |
+| Database Contract | Migrations, seed integrity, constraints and invariants |
+| Backend Security Audit | Python dependency vulnerability audit |
+| Faculty Portal Tests | React and portal unit tests |
+| Faculty Portal Build | TypeScript and production Next.js build |
+| Faculty Dependency Audit | Production npm vulnerability audit |
+| Mobile Static Analysis | Dart analyzer with fatal informational findings |
+| Mobile Unit Tests | Flutter protocol, persistence, sync and UI tests |
+| Android Debug Build | Backward-compatible Android APK compilation |
+| Container Build Verification | Backend and faculty portal production images |
 
-Tagging a release (`v*`) publishes backend and faculty images to GHCR. The portal release image is built from the repository root so it can include only the shared signed-protocol fixtures it validates.
+Tags matching `v*` run the separate release workflow and publish container images to GHCR.
 
-## Production Readiness Work Remaining
+## Institutional Deployment Checklist
 
-This repository is a hardened demonstration foundation, not yet an institutional production deployment. The following work remains before a real rollout:
+Before a real campus rollout, the institution must provide and approve:
 
-1. Replace all development identity endpoints and demonstration passwords with KIIT OIDC/SAML, MFA, short-lived server sessions, role claims, and account recovery controls.
-2. Provision and validate the official academic source of truth: student identities, faculty identities, sections, offerings, registrations, rooms, and timetables.
-3. Add Play Integrity on Android and Apple App Attest/DeviceCheck on iOS. Treat device make/model and emulator status as risk signals, not proof.
-4. Configure a managed Redis deployment with TLS, authentication, persistence policy, failover, and operational monitoring. Redis coordination is implemented; local development may use an intentionally restricted in-memory fallback only when Redis is not required.
-5. Add an authenticated background-sync strategy for Android/iOS; current retry polling is guaranteed only while the app is foregrounded or resumes.
-6. Build and test the selected local-presence provider. BLE proximity is deliberately not an active attendance requirement in the current demo and must not be claimed as deployed.
-7. Add production configuration for permitted origins, HTTPS termination, secret rotation, database backups, migration execution, monitoring, alerting, and disaster recovery. The current backend image does not run migrations automatically.
-8. Replace the local `ICT_ADMIN` role bootstrap with institutional administrator SSO, MFA, formal least-privilege role provisioning, and a reviewed break-glass process.
-9. Add end-to-end tests across a physical Android/iOS device, backend, faculty browser, offline transition, and late-proof reconciliation.
-10. Complete accessibility, privacy retention/deletion policy, consent language, export controls, and institutional security review.
+1. KIIT OIDC or SAML identity integration, MFA policy, recovery controls and role claims.
+2. Authoritative student, faculty, course, section, room, timetable and enrollment feeds.
+3. Android Play Integrity and Apple App Attest or DeviceCheck enforcement.
+4. Managed PostgreSQL and Redis with TLS, credentials, backups, failover and monitoring.
+5. HTTPS termination, permitted origins, secret rotation and migration operations.
+6. Background synchronization policies tested on supported Android and iOS versions.
+7. Physical-device end-to-end testing across offline capture, reconnection and late reconciliation.
+8. Accessibility review, retention/deletion rules, incident response and institutional security approval.
 
-## Security Position
+## Project Principle
 
-OfflineQR Attendance is designed to be **proxy-resistant, tamper-evident, device-bound, offline-capable, and auditable**. It does not claim to make physical collusion impossible; a student can still hand a registered phone to another person. The goal is to prevent or reveal practical abuse such as roll-number proxy, QR replay, duplicate claims, device cloning, unsanctioned device replacement, and offline record tampering.
+> Capture locally. Verify cryptographically. Store durably. Synchronize eventually. Re-verify centrally. Keep faculty as the controlled human fallback.
