@@ -214,7 +214,7 @@ class _OverallAttendanceCard extends StatelessWidget {
       padding: const EdgeInsets.all(KiitSpacing.x4),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final compact = constraints.maxWidth < 340;
+          final compact = constraints.maxWidth < 420;
           final meter = _AttendanceMeter(
             color: color,
             isHealthy: isHealthy,

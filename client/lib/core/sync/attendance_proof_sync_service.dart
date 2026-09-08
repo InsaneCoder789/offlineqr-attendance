@@ -91,29 +91,66 @@ class AttendanceProofSyncService {
           repaired: repaired,
         );
       }
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      final results =
-          (body['results'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final body = jsonDecode(response.body);
+      if (body is! Map<String, dynamic> || body['results'] is! List) {
+        _markBatchRetry(entries, 'MALFORMED_BATCH_RESPONSE');
+        return AttendanceProofSyncReport(
+          submitted: entries.length,
+          accepted: 0,
+          retryPending: entries.length,
+          rejected: 0,
+          repaired: repaired,
+        );
+      }
+      final results = body['results'] as List<dynamic>;
       final entriesByProofId = {
         for (final entry in entries) entry.proofId: entry
       };
       var accepted = 0;
       var retryPending = 0;
       var rejected = 0;
+      final handledProofIds = <String>{};
       for (final result in results) {
-        final proofId = result['proof_id'] as String;
+        if (result is! Map<String, dynamic>) continue;
+        final proofId = result['proof_id'];
+        if (proofId is! String || !handledProofIds.add(proofId)) continue;
         final entry = entriesByProofId[proofId];
         if (entry == null) continue;
-        final resultName = result['result'] as String;
+        final resultName = result['result'];
+        if (resultName is! String) {
+          database.markProofRetryPending(
+            proofId: proofId,
+            nextAttemptAt: _nextAttemptAt(entry.attemptCount + 1),
+            now: canonicalUtcTimestamp(DateTime.now()),
+            errorCode: 'MALFORMED_PROOF_RESULT',
+          );
+          retryPending++;
+          continue;
+        }
         if (resultName == 'ACCEPTED' || resultName == 'ALREADY_ACCEPTED') {
+          final attendanceRecordId = result['attendance_record_id'];
+          final attendanceMethod = result['attendance_method'];
+          final recordedAt = result['recorded_at'];
+          if (attendanceRecordId is! String ||
+              attendanceMethod is! String ||
+              recordedAt is! String) {
+            database.markProofRetryPending(
+              proofId: proofId,
+              nextAttemptAt: _nextAttemptAt(entry.attemptCount + 1),
+              now: canonicalUtcTimestamp(DateTime.now()),
+              errorCode: 'MALFORMED_ACCEPTANCE_RESULT',
+            );
+            retryPending++;
+            continue;
+          }
           database.markProofAccepted(
             proofId: proofId,
-            attendanceRecordId: result['attendance_record_id'] as String,
+            attendanceRecordId: attendanceRecordId,
             sessionId: entry.sessionId,
             studentId: entry.studentId,
             deviceRegistrationId: entry.deviceRegistrationId,
-            method: result['attendance_method'] as String,
-            recordedAt: result['recorded_at'] as String,
+            method: attendanceMethod,
+            recordedAt: recordedAt,
             now: canonicalUtcTimestamp(DateTime.now()),
           );
           accepted++;
@@ -133,6 +170,16 @@ class AttendanceProofSyncService {
           );
           rejected++;
         }
+      }
+      for (final entry in entries) {
+        if (handledProofIds.contains(entry.proofId)) continue;
+        database.markProofRetryPending(
+          proofId: entry.proofId,
+          nextAttemptAt: _nextAttemptAt(entry.attemptCount + 1),
+          now: canonicalUtcTimestamp(DateTime.now()),
+          errorCode: 'MISSING_BATCH_RESULT',
+        );
+        retryPending++;
       }
       return AttendanceProofSyncReport(
         submitted: entries.length,

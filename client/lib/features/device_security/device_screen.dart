@@ -8,6 +8,7 @@ import '../../core/security/attendance_device_guard.dart';
 import '../../core/security/device_registration_service.dart';
 import '../../core/security/device_profile.dart';
 import '../../core/security/secure_device_key_store.dart';
+import '../../core/security/student_auth_store.dart';
 import '../../ui/kiit_components.dart';
 import '../../ui/kiit_theme.dart';
 import 'device_transfer_page.dart';
@@ -28,7 +29,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
   AttendanceDeviceGuardOutcome? guardOutcome;
   String? message;
   bool busy = false;
-  final DeviceProfileCollector _profileCollector = const DeviceProfileCollector();
+  final DeviceProfileCollector _profileCollector =
+      const DeviceProfileCollector();
 
   @override
   void initState() {
@@ -38,6 +40,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
       database: widget.database,
       keyStore: keyStore,
       baseUri: apiBaseUri(),
+      authStore: StudentAuthStore(),
     );
     _refresh();
   }
@@ -104,6 +107,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
           platform: Platform.isAndroid ? 'Android' : Platform.operatingSystem,
           displayLabel:
               Platform.isAndroid ? 'Android Device' : 'Development Device',
+          deviceProfile: await _profileCollector.collect(),
         );
         message = 'Device registered for this account.';
         return;
@@ -116,7 +120,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
             Platform.isAndroid ? 'Android Device' : 'Development Device',
         deviceProfile: await _profileCollector.collect(),
       );
-      message = 'Replacement request sent to ICT. This phone remains blocked until approved.';
+      message =
+          'Replacement request sent to ICT. This phone remains blocked until approved.';
     });
   }
 
@@ -206,6 +211,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                         builder: (_) => DeviceTransferPage(
                           database: widget.database,
                           keyStore: keyStore,
+                          service: service,
                         ),
                       ),
                     );

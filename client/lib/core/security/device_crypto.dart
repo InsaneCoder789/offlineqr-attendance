@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
 
@@ -100,10 +101,7 @@ class InMemoryDeviceKeyStore implements DeviceKeyStore {
 
   @override
   Future<DeviceSigner> generateSigner() async {
-    _seed ??= List<int>.generate(
-            32, (index) => DateTime.now().microsecondsSinceEpoch + index)
-        .map((value) => value & 0xff)
-        .toList();
+    _seed ??= List<int>.generate(32, (_) => Random.secure().nextInt(256));
     return DeviceSigner(await _algorithm.newKeyPairFromSeed(_seed!));
   }
 

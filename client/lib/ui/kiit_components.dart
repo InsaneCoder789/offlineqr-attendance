@@ -369,35 +369,45 @@ class CuteEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return KiitSoftPanel(
-      padding: const EdgeInsets.all(KiitSpacing.x5),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const ClassesOverSticker(),
-          const SizedBox(height: KiitSpacing.x4),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final showSticker =
+            !constraints.hasBoundedHeight || constraints.maxHeight >= 250;
+        return KiitSoftPanel(
+          padding: const EdgeInsets.all(KiitSpacing.x5),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (showSticker) ...[
+                const ClassesOverSticker(),
+                const SizedBox(height: KiitSpacing.x4),
+              ],
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+              const SizedBox(height: KiitSpacing.x2),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                maxLines: showSticker ? null : 2,
+                overflow: showSticker ? null : TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: KiitColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              if (action != null) ...[
+                const SizedBox(height: KiitSpacing.x4),
+                action!,
+              ],
+            ],
           ),
-          const SizedBox(height: KiitSpacing.x2),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: KiitColors.textSecondary,
-                  fontWeight: FontWeight.w600,
-                ),
-          ),
-          if (action != null) ...[
-            const SizedBox(height: KiitSpacing.x4),
-            action!,
-          ],
-        ],
-      ),
+        );
+      },
     );
   }
 }

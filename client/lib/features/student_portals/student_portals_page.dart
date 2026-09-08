@@ -7,7 +7,8 @@ import '../../ui/kiit_theme.dart';
 class StudentPortalsPage extends StatelessWidget {
   const StudentPortalsPage({super.key});
 
-  static final Uri sapPortal = Uri.parse('https://kiitportal.kiituniversity.net/');
+  static final Uri sapPortal =
+      Uri.parse('https://kiitportal.kiituniversity.net/');
   static final Uri kayaPortal = Uri.parse('https://kaya.cse.kiit.ac.in/login/');
 
   @override

@@ -7,7 +7,7 @@ import 'package:sqlite3/sqlite3.dart';
 import '../sync/bootstrap_models.dart';
 import '../../features/attendance/attendance_math.dart';
 
-const int localSchemaVersion = 5;
+const int localSchemaVersion = 6;
 
 class StudentProfile {
   const StudentProfile({
@@ -232,7 +232,7 @@ class LocalAttendanceDatabase {
   final Database _db;
 
   static Future<LocalAttendanceDatabase> openDefault() async {
-    final directory = await getApplicationDocumentsDirectory();
+    final directory = await getApplicationSupportDirectory();
     final dbPath = p.join(directory.path, 'kiit_attendance_goal02.sqlite');
     return LocalAttendanceDatabase(sqlite3.open(dbPath))..migrate();
   }
@@ -249,30 +249,66 @@ class LocalAttendanceDatabase {
 
   void migrate() {
     _db.execute('PRAGMA foreign_keys = ON;');
+    _db.execute('PRAGMA busy_timeout = 5000;');
+    _db.execute('PRAGMA synchronous = FULL;');
+    _db.execute('PRAGMA secure_delete = ON;');
+    _db.execute('PRAGMA journal_mode = WAL;');
     final currentVersion = _db.userVersion;
     if (currentVersion > localSchemaVersion) {
       throw StateError('local database schema is newer than this app');
     }
     if (currentVersion < 1) {
-      _applySchemaV1();
-      _db.userVersion = 1;
+      _applyMigration(1, _applySchemaV1);
     }
     if (_db.userVersion < 2) {
-      _applySchemaV2();
-      _db.userVersion = 2;
+      _applyMigration(2, _applySchemaV2);
     }
     if (_db.userVersion < 3) {
-      _applySchemaV3();
-      _db.userVersion = 3;
+      _applyMigration(3, _applySchemaV3);
     }
     if (_db.userVersion < 4) {
-      _applySchemaV4();
-      _db.userVersion = 4;
+      _applyMigration(4, _applySchemaV4);
     }
     if (_db.userVersion < 5) {
-      _applySchemaV5();
-      _db.userVersion = 5;
+      _applyMigration(5, _applySchemaV5);
     }
+    if (_db.userVersion < 6) {
+      _applyMigration(6, _applySchemaV6);
+    }
+    _recoverInterruptedProofSyncs();
+  }
+
+  void _applyMigration(int version, void Function() apply) {
+    _db.execute('BEGIN IMMEDIATE;');
+    try {
+      apply();
+      _db.userVersion = version;
+      _db.execute('COMMIT;');
+    } catch (_) {
+      _db.execute('ROLLBACK;');
+      rethrow;
+    }
+  }
+
+  void _recoverInterruptedProofSyncs() {
+    final now = DateTime.now().toUtc().toIso8601String();
+    _db.execute(
+      '''
+      UPDATE attendance_proof_outbox
+      SET state = 'RETRY_PENDING', next_attempt_at = ?, updated_at = ?,
+          last_error_code = 'INTERRUPTED_SYNC'
+      WHERE state = 'SYNCING'
+      ''',
+      [now, now],
+    );
+    _db.execute(
+      '''
+      UPDATE attendance_proofs_local
+      SET technical_state = 'RETRY_PENDING', updated_at = ?
+      WHERE technical_state = 'SYNCING'
+      ''',
+      [now],
+    );
   }
 
   void applyBootstrap(BootstrapSyncPayload payload) {
@@ -406,6 +442,18 @@ class LocalAttendanceDatabase {
       [studentId],
     );
     if (rows.isEmpty) return;
+    final pendingProofs = _db.select(
+      '''
+      SELECT 1 FROM attendance_proof_outbox
+      WHERE state IN ('QUEUED', 'SYNCING', 'RETRY_PENDING')
+      LIMIT 1
+      ''',
+    );
+    if (pendingProofs.isNotEmpty) {
+      throw StateError(
+        'A different student cannot replace this local account while attendance proofs are awaiting sync.',
+      );
+    }
     _db.execute('DELETE FROM attendance_proof_outbox');
     _db.execute('DELETE FROM attendance_proofs_local');
     _db.execute('DELETE FROM attendance_claims');
@@ -1445,9 +1493,15 @@ class LocalAttendanceDatabase {
           qr_signature = COALESCE(qr_signature, 'legacy-unverified');
     ''');
   }
+
+  void _applySchemaV6() {
+    // A process can terminate between marking an outbox row SYNCING and
+    // receiving the server response. Startup recovery returns it to retry.
+    _recoverInterruptedProofSyncs();
+  }
 }
 
 Future<bool> localDatabaseFileExists() async {
-  final directory = await getApplicationDocumentsDirectory();
+  final directory = await getApplicationSupportDirectory();
   return File(p.join(directory.path, 'kiit_attendance_goal02.sqlite')).exists();
 }

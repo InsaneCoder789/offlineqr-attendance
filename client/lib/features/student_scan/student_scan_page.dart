@@ -207,16 +207,16 @@ class _AttendanceScannerRouteState extends State<_AttendanceScannerRoute> {
     formats: const [BarcodeFormat.qrCode],
     cameraResolution: const Size(1280, 720),
   );
-  final seen = <String>{};
   Timer? zoomTimer;
   bool processing = false;
+  String? lastAttemptedRaw;
   String statusText = 'Scan the live classroom QR.';
   double zoomScale = 0;
 
   @override
   void initState() {
     super.initState();
-    zoomTimer = Timer.periodic(const Duration(seconds: 2), (_) => _stepZoom());
+    zoomTimer = Timer.periodic(const Duration(seconds: 3), (_) => _stepZoom());
   }
 
   @override
@@ -228,13 +228,13 @@ class _AttendanceScannerRouteState extends State<_AttendanceScannerRoute> {
 
   Future<void> _stepZoom() async {
     if (!mounted || processing) return;
-    final next = zoomScale >= 0.72 ? 0.0 : zoomScale + 0.18;
+    if (zoomScale >= 0.54) {
+      zoomTimer?.cancel();
+      return;
+    }
+    final next = zoomScale + 0.18;
     try {
-      if (next == 0) {
-        await controller.resetZoomScale();
-      } else {
-        await controller.setZoomScale(next);
-      }
+      await controller.setZoomScale(next);
       if (mounted) {
         setState(() => zoomScale = next);
       }
@@ -244,13 +244,15 @@ class _AttendanceScannerRouteState extends State<_AttendanceScannerRoute> {
   }
 
   Future<void> _process(String raw) async {
-    if (raw.trim().isEmpty || seen.contains(raw) || processing) return;
-    seen.add(raw);
+    if (raw.trim().isEmpty || raw.length > 16384 || processing) return;
+    if (lastAttemptedRaw == raw) return;
+    lastAttemptedRaw = raw;
     setState(() {
       processing = true;
       statusText = 'Verifying secure attendance proof...';
     });
     try {
+      await controller.stop();
       final created = await AttendanceClaimService(
         database: widget.database,
         keyStore: widget.keyStore,
@@ -272,16 +274,20 @@ class _AttendanceScannerRouteState extends State<_AttendanceScannerRoute> {
       if (mounted) {
         setState(() {
           processing = false;
+          lastAttemptedRaw = null;
           statusText = exception.message;
         });
+        await controller.start();
       }
     } catch (_) {
       HapticFeedback.heavyImpact();
       if (mounted) {
         setState(() {
           processing = false;
+          lastAttemptedRaw = null;
           statusText = 'Invalid QR code. Please scan the classroom QR.';
         });
+        await controller.start();
       }
     }
   }
@@ -297,7 +303,7 @@ class _AttendanceScannerRouteState extends State<_AttendanceScannerRoute> {
             MobileScanner(
               controller: controller,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, child) {
+              errorBuilder: (context, error) {
                 return _ScannerError(error: error.errorCode.name);
               },
               onDetect: (capture) {
@@ -331,20 +337,17 @@ class _AttendanceScannerRouteState extends State<_AttendanceScannerRoute> {
                   const Spacer(),
                   IconButton(
                     tooltip: 'Torch',
-                    onPressed: controller.toggleTorch,
+                    onPressed: () async {
+                      try {
+                        await controller.toggleTorch();
+                      } catch (_) {
+                        if (mounted) {
+                          setState(() => statusText =
+                              'Torch is unavailable on this camera.');
+                        }
+                      }
+                    },
                     icon: const Icon(Icons.flashlight_on_outlined),
-                    color: KiitColors.brandPrimary,
-                  ),
-                  IconButton(
-                    tooltip: 'QR mode',
-                    onPressed: () {},
-                    icon: const Icon(Icons.qr_code_2_rounded),
-                    color: KiitColors.brandPrimary,
-                  ),
-                  IconButton(
-                    tooltip: 'More',
-                    onPressed: () {},
-                    icon: const Icon(Icons.more_vert_rounded),
                     color: KiitColors.brandPrimary,
                   ),
                 ],

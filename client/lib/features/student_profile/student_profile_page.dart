@@ -91,7 +91,8 @@ class StudentProfilePage extends StatelessWidget {
           ),
           const SizedBox(height: KiitSpacing.x4),
           const StatusChip(
-            label: 'Attendance identity is locked to this device. Device changes require verified replacement.',
+            label:
+                'Attendance identity is locked to this device. Device changes require verified replacement.',
             icon: Icons.lock_outline,
             tone: StatusTone.info,
           ),

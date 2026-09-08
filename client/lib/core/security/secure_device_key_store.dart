@@ -10,7 +10,15 @@ class SecureStorageDeviceKeyStore implements DeviceKeyStore {
   SecureStorageDeviceKeyStore({
     FlutterSecureStorage? storage,
     String storageKey = 'attendance_device_ed25519_seed_v1',
-  })  : _storage = storage ?? const FlutterSecureStorage(),
+  })  : _storage = storage ??
+            const FlutterSecureStorage(
+              aOptions: AndroidOptions(encryptedSharedPreferences: true),
+              iOptions: IOSOptions(
+                accessibility: KeychainAccessibility.unlocked_this_device,
+                synchronizable: false,
+                accountName: 'in.ac.kiit.attendance.device-key',
+              ),
+            ),
         _storageKey = storageKey;
 
   final FlutterSecureStorage _storage;
@@ -33,22 +41,36 @@ class SecureStorageDeviceKeyStore implements DeviceKeyStore {
   Future<bool> isAvailable() async =>
       await _storage.read(key: _storageKey) != null;
 
-  Future<String?> exportSeed() => _storage.read(key: _storageKey);
-
-  Future<void> importSeed(String encodedSeed) async {
-    await _storage.write(key: _storageKey, value: encodedSeed);
-  }
-
-  Future<void> deleteSeed() => _storage.delete(key: _storageKey);
-
   @override
   Future<DeviceSigner?> loadSigner() async {
     final encoded = await _storage.read(key: _storageKey);
     if (encoded == null) {
       return null;
     }
+    List<int> seed;
+    try {
+      seed = base64UrlNoPaddingDecode(encoded);
+    } catch (_) {
+      throw const DeviceKeyStoreException(
+        'The protected attendance credential is invalid. Request an ICT-approved device replacement.',
+      );
+    }
+    if (seed.length != 32) {
+      throw const DeviceKeyStoreException(
+        'The protected attendance credential is invalid. Request an ICT-approved device replacement.',
+      );
+    }
     return DeviceSigner(
-      await _algorithm.newKeyPairFromSeed(base64UrlNoPaddingDecode(encoded)),
+      await _algorithm.newKeyPairFromSeed(seed),
     );
   }
+}
+
+class DeviceKeyStoreException implements Exception {
+  const DeviceKeyStoreException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }

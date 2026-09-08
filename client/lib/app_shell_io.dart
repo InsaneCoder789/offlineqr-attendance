@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'core/database/local_database.dart';
 import 'core/network/api_config.dart';
 import 'core/security/secure_device_key_store.dart';
+import 'core/security/student_auth_store.dart';
 import 'core/sync/attendance_proof_sync_service.dart';
 import 'core/sync/bootstrap_sync_service.dart';
 import 'features/student_auth/student_login_page.dart';
@@ -12,8 +13,33 @@ import 'features/student_shell/student_home.dart';
 import 'ui/kiit_components.dart';
 import 'ui/kiit_theme.dart';
 
-class AttendanceApp extends StatelessWidget {
+class AttendanceApp extends StatefulWidget {
   const AttendanceApp({super.key});
+
+  @override
+  State<AttendanceApp> createState() => _AttendanceAppState();
+}
+
+class _AttendanceAppState extends State<AttendanceApp> {
+  late final Future<LocalAttendanceDatabase> _databaseFuture;
+  late final StudentAuthStore _authStore;
+  LocalAttendanceDatabase? _database;
+
+  @override
+  void initState() {
+    super.initState();
+    _authStore = StudentAuthStore();
+    _databaseFuture = LocalAttendanceDatabase.openDefault().then((database) {
+      _database = database;
+      return database;
+    });
+  }
+
+  @override
+  void dispose() {
+    _database?.close();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +50,7 @@ class AttendanceApp extends StatelessWidget {
         builder: (_) => const KiitNotFoundPage(),
       ),
       home: FutureBuilder<LocalAttendanceDatabase>(
-        future: LocalAttendanceDatabase.openDefault(),
+        future: _databaseFuture,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Scaffold(
@@ -38,9 +64,10 @@ class AttendanceApp extends StatelessWidget {
               body: Center(child: CircularProgressIndicator()),
             );
           }
-          return DevelopmentDashboardShell(
+          return StudentAppShell(
             database: snapshot.data!,
             keyStore: SecureStorageDeviceKeyStore(),
+            authStore: _authStore,
           );
         },
       ),
@@ -48,40 +75,52 @@ class AttendanceApp extends StatelessWidget {
   }
 }
 
-class DevelopmentDashboardShell extends StatefulWidget {
-  const DevelopmentDashboardShell({
+class StudentAppShell extends StatefulWidget {
+  const StudentAppShell({
     super.key,
     required this.database,
     required this.keyStore,
+    required this.authStore,
   });
 
   final LocalAttendanceDatabase database;
   final SecureStorageDeviceKeyStore keyStore;
+  final StudentAuthStore authStore;
 
   @override
-  State<DevelopmentDashboardShell> createState() =>
-      _DevelopmentDashboardShellState();
+  State<StudentAppShell> createState() => _StudentAppShellState();
 }
 
-class _DevelopmentDashboardShellState extends State<DevelopmentDashboardShell>
+class _StudentAppShellState extends State<StudentAppShell>
     with WidgetsBindingObserver {
   int refreshToken = 0;
   bool syncing = false;
   String? syncError;
   late bool loggedIn;
+  bool checkingSession = true;
   Timer? syncPoller;
+  Duration _pollInterval = const Duration(seconds: 15);
 
   @override
   void initState() {
     super.initState();
-    loggedIn = widget.database.getCurrentStudent() != null;
+    loggedIn = false;
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && loggedIn) {
-        sync();
-        _startSyncPolling();
-      }
+    _restoreAuthenticatedSession();
+  }
+
+  Future<void> _restoreAuthenticatedSession() async {
+    final session = await widget.authStore.read();
+    if (!mounted) return;
+    setState(() {
+      loggedIn = session != null &&
+          widget.database.getCurrentStudent()?.id == session.studentId;
+      checkingSession = false;
     });
+    if (loggedIn) {
+      await sync();
+      _startSyncPolling();
+    }
   }
 
   @override
@@ -111,7 +150,7 @@ class _DevelopmentDashboardShellState extends State<DevelopmentDashboardShell>
     bool refreshViews = true,
     bool forceProofSync = false,
   }) async {
-    if (syncing) return false;
+    if (syncing || !mounted) return false;
     setState(() => syncing = true);
     try {
       final baseUri = apiBaseUri();
@@ -125,10 +164,12 @@ class _DevelopmentDashboardShellState extends State<DevelopmentDashboardShell>
         await BootstrapSyncService(
           database: widget.database,
           baseUri: baseUri,
+          authStore: widget.authStore,
         ).sync();
       } catch (_) {
         bootstrapOk = false;
       }
+      if (!mounted) return false;
       if (proofSync.rejected > 0) {
         setState(() {
           if (refreshViews) {
@@ -145,11 +186,15 @@ class _DevelopmentDashboardShellState extends State<DevelopmentDashboardShell>
         syncError =
             !bootstrapOk || proofSync.retryPending > 0 ? 'Sync pending' : null;
       });
+      _pollInterval = proofSync.retryPending > 0
+          ? const Duration(seconds: 5)
+          : const Duration(seconds: 30);
       return bootstrapOk && proofSync.retryPending == 0;
     } catch (_) {
       if (mounted) {
         setState(() => syncError = 'Sync failed');
       }
+      _pollInterval = const Duration(seconds: 10);
       return false;
     } finally {
       if (mounted) {
@@ -163,14 +208,22 @@ class _DevelopmentDashboardShellState extends State<DevelopmentDashboardShell>
     // Foreground polling makes captured proofs the first work attempted as
     // soon as the backend becomes reachable again. The outbox backoff still
     // protects the server during a real outage.
-    syncPoller = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!mounted || syncing || !loggedIn) return;
-      _syncInternal(forceProofSync: true);
-    });
+    void scheduleNext() {
+      syncPoller = Timer(_pollInterval, () async {
+        if (!mounted || syncing || !loggedIn) return;
+        await _syncInternal(forceProofSync: true);
+        if (mounted && loggedIn) scheduleNext();
+      });
+    }
+
+    scheduleNext();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (checkingSession) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     if (!loggedIn) {
       return StudentLoginPage(
         database: widget.database,
@@ -182,6 +235,7 @@ class _DevelopmentDashboardShellState extends State<DevelopmentDashboardShell>
           });
           _startSyncPolling();
         },
+        authStore: widget.authStore,
       );
     }
     return StudentHome(

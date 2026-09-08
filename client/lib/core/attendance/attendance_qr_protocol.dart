@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:uuid/uuid.dart';
@@ -17,6 +18,9 @@ const institutionRootPublicKey = '0EqyMnQrtKs6E2i9RhXk5tAiSrcaAWuvhSCjMsl3hzc';
 const qrEpochSeconds = 5;
 const claimSeconds = 60;
 const clockSkewSeconds = 2;
+const _maxQrPayloadCharacters = 16384;
+const _maxQrFieldCharacters = 4096;
+const _maxAuthorizationLifetime = Duration(hours: 12);
 
 class SessionAuthorization {
   const SessionAuthorization({
@@ -46,21 +50,36 @@ class SessionAuthorization {
   final String serverSignature;
 
   factory SessionAuthorization.fromJson(Map<String, dynamic> json) {
-    final validFromText = json['valid_from'] as String;
-    final validUntilText = json['valid_until'] as String;
-    return SessionAuthorization(
-      authorizationId: json['authorization_id'] as String,
-      sessionId: json['session_id'] as String,
-      courseOfferingId: json['course_offering_id'] as String,
-      facultyId: json['faculty_id'] as String,
-      validFrom: DateTime.parse(validFromText),
-      validUntil: DateTime.parse(validUntilText),
-      validFromText: validFromText,
-      validUntilText: validUntilText,
-      keyId: json['key_id'] as String,
-      sessionPublicKey: json['session_public_key'] as String,
-      serverSignature: json['server_signature'] as String,
-    );
+    try {
+      if (json['protocol_version'] != sessionAuthorizationProtocol) {
+        throw const AttendanceQrException(
+          'UNSUPPORTED_AUTHORIZATION',
+          'This attendance session is not supported by this app.',
+        );
+      }
+      final validFromText = _requiredText(json, 'valid_from');
+      final validUntilText = _requiredText(json, 'valid_until');
+      return SessionAuthorization(
+        authorizationId: _requiredText(json, 'authorization_id'),
+        sessionId: _requiredText(json, 'session_id'),
+        courseOfferingId: _requiredText(json, 'course_offering_id'),
+        facultyId: _requiredText(json, 'faculty_id'),
+        validFrom: DateTime.parse(validFromText).toUtc(),
+        validUntil: DateTime.parse(validUntilText).toUtc(),
+        validFromText: validFromText,
+        validUntilText: validUntilText,
+        keyId: _requiredText(json, 'key_id'),
+        sessionPublicKey: _requiredText(json, 'session_public_key'),
+        serverSignature: _requiredText(json, 'server_signature'),
+      );
+    } on AttendanceQrException {
+      rethrow;
+    } catch (_) {
+      throw const AttendanceQrException(
+        'MALFORMED_AUTHORIZATION',
+        'This attendance session could not be read.',
+      );
+    }
   }
 }
 
@@ -90,30 +109,76 @@ class AttendanceQrPayload {
   final SessionAuthorization authorization;
 
   factory AttendanceQrPayload.parse(String raw) {
-    final decoded = jsonDecode(raw) as Map<String, dynamic>;
-    if (decoded['protocol_version'] != attendanceQrProtocol) {
+    if (raw.length > _maxQrPayloadCharacters) {
       throw const AttendanceQrException(
-        'UNSUPPORTED_PROTOCOL',
-        'This QR code is not supported by this app.',
+        'QR_TOO_LARGE',
+        'This QR code is not a valid attendance code.',
       );
     }
-    final issuedAtText = decoded['issued_at'] as String;
-    final expiresAtText = decoded['expires_at'] as String;
-    return AttendanceQrPayload(
-      sessionId: decoded['session_id'] as String,
-      epoch: decoded['epoch'] as int,
-      issuedAt: DateTime.parse(issuedAtText),
-      expiresAt: DateTime.parse(expiresAtText),
-      issuedAtText: issuedAtText,
-      expiresAtText: expiresAtText,
-      challenge: decoded['challenge'] as String,
-      keyId: decoded['key_id'] as String,
-      signature: decoded['signature'] as String,
-      authorization: SessionAuthorization.fromJson(
-        decoded['session_authorization'] as Map<String, dynamic>,
-      ),
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) {
+        throw const AttendanceQrException(
+          'MALFORMED_QR',
+          'This QR code is not a valid attendance code.',
+        );
+      }
+      if (decoded['protocol_version'] != attendanceQrProtocol) {
+        throw const AttendanceQrException(
+          'UNSUPPORTED_PROTOCOL',
+          'This QR code is not supported by this app.',
+        );
+      }
+      final issuedAtText = _requiredText(decoded, 'issued_at');
+      final expiresAtText = _requiredText(decoded, 'expires_at');
+      final epoch = decoded['epoch'];
+      if (epoch is! int || epoch < 0) {
+        throw const AttendanceQrException(
+          'MALFORMED_QR',
+          'This QR code is not a valid attendance code.',
+        );
+      }
+      final authorizationJson = decoded['session_authorization'];
+      if (authorizationJson is! Map<String, dynamic>) {
+        throw const AttendanceQrException(
+          'MALFORMED_AUTHORIZATION',
+          'This attendance session could not be read.',
+        );
+      }
+      return AttendanceQrPayload(
+        sessionId: _requiredText(decoded, 'session_id'),
+        epoch: epoch,
+        issuedAt: DateTime.parse(issuedAtText).toUtc(),
+        expiresAt: DateTime.parse(expiresAtText).toUtc(),
+        issuedAtText: issuedAtText,
+        expiresAtText: expiresAtText,
+        challenge: _requiredText(decoded, 'challenge'),
+        keyId: _requiredText(decoded, 'key_id'),
+        signature: _requiredText(decoded, 'signature'),
+        authorization: SessionAuthorization.fromJson(authorizationJson),
+      );
+    } on AttendanceQrException {
+      rethrow;
+    } catch (_) {
+      throw const AttendanceQrException(
+        'MALFORMED_QR',
+        'This QR code is not a valid attendance code.',
+      );
+    }
+  }
+}
+
+String _requiredText(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is! String ||
+      value.isEmpty ||
+      value.length > _maxQrFieldCharacters) {
+    throw const AttendanceQrException(
+      'MALFORMED_QR',
+      'This QR code is not a valid attendance code.',
     );
   }
+  return value;
 }
 
 class AttendanceQrException implements Exception {
@@ -159,6 +224,19 @@ class AttendanceQrVerifier {
 
   Future<void> verify(AttendanceQrPayload qr) async {
     final now = _clock().toUtc();
+    if (qr.sessionId != qr.authorization.sessionId ||
+        qr.keyId != qr.authorization.keyId ||
+        !qr.expiresAt.isAfter(qr.issuedAt) ||
+        qr.expiresAt.difference(qr.issuedAt) >
+            const Duration(seconds: qrEpochSeconds + clockSkewSeconds) ||
+        !qr.authorization.validUntil.isAfter(qr.authorization.validFrom) ||
+        qr.authorization.validUntil.difference(qr.authorization.validFrom) >
+            _maxAuthorizationLifetime) {
+      throw const AttendanceQrException(
+        'INVALID_QR_BINDING',
+        'This attendance QR could not be verified.',
+      );
+    }
     if (now.isAfter(qr.expiresAt.toUtc().add(_skew)) ||
         now.isBefore(qr.issuedAt.toUtc().subtract(_skew))) {
       throw const AttendanceQrException(
@@ -178,7 +256,7 @@ class AttendanceQrVerifier {
       payload: canonicalSessionAuthorization(qr.authorization),
       signature: qr.authorization.serverSignature,
     );
-    if (!rootOk || qr.keyId != qr.authorization.keyId) {
+    if (!rootOk) {
       throw const AttendanceQrException(
         'INVALID_SIGNATURE',
         'This attendance QR could not be verified.',
@@ -354,7 +432,7 @@ class AttendanceClaimService {
     final respondedAtText = canonicalUtcTimestamp(respondedAt);
     final proofCreatedAtText = canonicalUtcTimestamp(proofCreatedAt);
     final nonce = base64UrlNoPadding(
-      utf8.encode('${qr.sessionId}:${claim.claimId}:${qr.epoch}'),
+      List<int>.generate(32, (_) => Random.secure().nextInt(256)),
     );
     final hostPublicKey = qr.authorization.sessionPublicKey;
     const transport = primaryPresenceTransport;

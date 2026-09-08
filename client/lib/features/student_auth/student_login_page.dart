@@ -1,11 +1,10 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
 import '../../core/database/local_database.dart';
 import '../../core/network/api_config.dart';
-import '../../core/sync/bootstrap_models.dart';
+import '../../core/security/student_auth_service.dart';
+import '../../core/security/student_auth_store.dart';
+import '../../core/sync/bootstrap_sync_service.dart';
 import '../../ui/kiit_components.dart';
 import '../../ui/kiit_theme.dart';
 
@@ -14,31 +13,36 @@ class StudentLoginPage extends StatefulWidget {
     super.key,
     required this.database,
     required this.onLoginComplete,
+    required this.authStore,
   });
 
   final LocalAttendanceDatabase database;
   final VoidCallback onLoginComplete;
+  final StudentAuthStore authStore;
 
   @override
   State<StudentLoginPage> createState() => _StudentLoginPageState();
 }
 
 class _StudentLoginPageState extends State<StudentLoginPage> {
-  final emailController = TextEditingController(text: '24155866@kiit.ac.in');
+  final rollController = TextEditingController();
+  final passwordController = TextEditingController();
+  bool obscurePassword = true;
   bool loading = false;
   String? error;
 
   @override
   void dispose() {
-    emailController.dispose();
+    rollController.dispose();
+    passwordController.dispose();
     super.dispose();
   }
 
   Future<void> login() async {
-    final email = emailController.text.trim().toLowerCase();
-    final roll = rollFromEmail(email);
-    if (roll == null) {
-      setState(() => error = 'Use your KIIT email, for example 24155866@kiit.ac.in.');
+    final roll = rollController.text.trim();
+    if (!RegExp(r'^[0-9]{5,12}$').hasMatch(roll) ||
+        passwordController.text.isEmpty) {
+      setState(() => error = 'Enter your roll number and password.');
       return;
     }
     setState(() {
@@ -46,33 +50,101 @@ class _StudentLoginPageState extends State<StudentLoginPage> {
       error = null;
     });
     try {
-      final response = await http
-          .post(
-            apiBaseUri().resolve('/api/v1/auth/dev-login'),
-            headers: {'content-type': 'application/json'},
-            body: jsonEncode({'email': email}),
-          )
-          .timeout(apiRequestTimeout);
-      if (response.statusCode != 200) {
-        throw StateError(_messageFrom(response.body));
-      }
-      final payload = BootstrapSyncPayload.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>,
+      final auth =
+          StudentAuthService(baseUri: apiBaseUri(), store: widget.authStore);
+      final result = await auth.login(
+        rollNumber: roll,
+        password: passwordController.text,
       );
-      if (payload.student.rollNumber != roll) {
-        throw StateError('The KIIT email did not match the returned student record.');
+      if (result.mustChangePassword) {
+        final changed =
+            await _requirePasswordChange(auth, passwordController.text);
+        if (!changed) return;
+        throw StateError(
+            'Password changed. Sign in again with your new password.');
       }
-      widget.database.applyBootstrap(payload);
+      await BootstrapSyncService(
+        database: widget.database,
+        baseUri: apiBaseUri(),
+        authStore: widget.authStore,
+      ).sync();
       widget.onLoginComplete();
     } catch (exception) {
       if (mounted) {
-        setState(() => error = exception.toString().replaceFirst('Bad state: ', ''));
+        setState(
+            () => error = exception.toString().replaceFirst('Bad state: ', ''));
       }
     } finally {
       if (mounted) {
         setState(() => loading = false);
       }
     }
+  }
+
+  Future<bool> _requirePasswordChange(
+      StudentAuthService auth, String currentPassword) async {
+    final newPassword = TextEditingController();
+    final confirmPassword = TextEditingController();
+    String? dialogError;
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Create your password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                  'Your temporary password must be replaced before attendance services can be used.'),
+              const SizedBox(height: KiitSpacing.x3),
+              TextField(
+                controller: newPassword,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password'),
+              ),
+              const SizedBox(height: KiitSpacing.x2),
+              TextField(
+                controller: confirmPassword,
+                obscureText: true,
+                decoration:
+                    const InputDecoration(labelText: 'Confirm new password'),
+              ),
+              if (dialogError != null) ...[
+                const SizedBox(height: KiitSpacing.x2),
+                Text(dialogError!,
+                    style: const TextStyle(color: KiitColors.error)),
+              ],
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () async {
+                if (newPassword.text != confirmPassword.text) {
+                  setDialogState(
+                      () => dialogError = 'The passwords do not match.');
+                  return;
+                }
+                try {
+                  await auth.changePassword(
+                    currentPassword: currentPassword,
+                    newPassword: newPassword.text,
+                  );
+                  if (context.mounted) Navigator.of(context).pop(true);
+                } catch (error) {
+                  setDialogState(() => dialogError =
+                      error.toString().replaceFirst('Bad state: ', ''));
+                }
+              },
+              child: const Text('Set password'),
+            ),
+          ],
+        ),
+      ),
+    );
+    newPassword.dispose();
+    confirmPassword.dispose();
+    return result ?? false;
   }
 
   @override
@@ -91,7 +163,7 @@ class _StudentLoginPageState extends State<StudentLoginPage> {
             ),
             const SizedBox(height: KiitSpacing.x2),
             Text(
-              'Sign in with your KIIT email. Your roll number maps to your official section, courses, timetable, and attendance records.',
+              'Use your KIIT roll number and password. Your official record maps to your section, courses, timetable, and attendance data.',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
             const SizedBox(height: KiitSpacing.x8),
@@ -99,19 +171,41 @@ class _StudentLoginPageState extends State<StudentLoginPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Student Login', style: Theme.of(context).textTheme.titleLarge),
+                  Text('Student Login',
+                      style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: KiitSpacing.x4),
                   TextField(
-                    controller: emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    autofillHints: const [AutofillHints.email],
+                    controller: rollController,
+                    keyboardType: TextInputType.number,
+                    autofillHints: const [AutofillHints.username],
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Roll number',
+                      hintText: '24155866',
+                      prefixIcon: Icon(Icons.badge_outlined),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: KiitSpacing.x4),
+                  TextField(
+                    controller: passwordController,
+                    obscureText: obscurePassword,
+                    autofillHints: const [AutofillHints.password],
                     textInputAction: TextInputAction.done,
                     onSubmitted: (_) => loading ? null : login(),
-                    decoration: const InputDecoration(
-                      labelText: 'KIIT email',
-                      hintText: '24155866@kiit.ac.in',
-                      prefixIcon: Icon(Icons.alternate_email),
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        tooltip:
+                            obscurePassword ? 'Show password' : 'Hide password',
+                        onPressed: () =>
+                            setState(() => obscurePassword = !obscurePassword),
+                        icon: Icon(obscurePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined),
+                      ),
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: KiitSpacing.x4),
@@ -141,29 +235,9 @@ class _StudentLoginPageState extends State<StudentLoginPage> {
               ),
             ),
             const SizedBox(height: KiitSpacing.x5),
-            const StatusChip(
-              label: 'Demo identity: 24155866@kiit.ac.in',
-              icon: Icons.verified_user_outlined,
-              tone: StatusTone.info,
-            ),
           ],
         ),
       ),
     );
   }
-
-  String _messageFrom(String body) {
-    try {
-      final decoded = jsonDecode(body) as Map<String, dynamic>;
-      final error = decoded['error'] as Map<String, dynamic>?;
-      return error?['message'] as String? ?? body;
-    } catch (_) {
-      return body;
-    }
-  }
-}
-
-String? rollFromEmail(String email) {
-  final match = RegExp(r'^([0-9]{5,12})@kiit\.ac\.in$').firstMatch(email);
-  return match?.group(1);
 }
