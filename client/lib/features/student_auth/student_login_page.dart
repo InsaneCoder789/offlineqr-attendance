@@ -151,93 +151,152 @@ class _StudentLoginPageState extends State<StudentLoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(KiitSpacing.x5),
-          children: [
-            const SizedBox(height: KiitSpacing.x8),
-            const KiitLogo(height: 58),
-            const SizedBox(height: KiitSpacing.x8),
-            Text(
-              'KIIT Attendance',
-              style: Theme.of(context).textTheme.displaySmall,
+        child: LayoutBuilder(
+          builder: (context, constraints) => ListView(
+            padding: EdgeInsets.symmetric(
+              horizontal: constraints.maxWidth > 600
+                  ? (constraints.maxWidth - 480) / 2
+                  : KiitSpacing.x5,
+              vertical: KiitSpacing.x6,
             ),
-            const SizedBox(height: KiitSpacing.x2),
-            Text(
-              'Use your KIIT roll number and password. Your official record maps to your section, courses, timetable, and attendance data.',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            const SizedBox(height: KiitSpacing.x8),
-            KiitCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Student Login',
-                      style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: KiitSpacing.x4),
-                  TextField(
-                    controller: rollController,
-                    keyboardType: TextInputType.number,
-                    autofillHints: const [AutofillHints.username],
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Roll number',
-                      hintText: '24155866',
-                      prefixIcon: Icon(Icons.badge_outlined),
-                      border: OutlineInputBorder(),
-                    ),
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  width: 72,
+                  height: 72,
+                  padding: const EdgeInsets.all(KiitSpacing.x3),
+                  decoration: BoxDecoration(
+                    color: KiitColors.surface,
+                    borderRadius: BorderRadius.circular(KiitRadius.large),
+                    border: Border.all(color: KiitColors.border),
                   ),
-                  const SizedBox(height: KiitSpacing.x4),
-                  TextField(
-                    controller: passwordController,
-                    obscureText: obscurePassword,
-                    autofillHints: const [AutofillHints.password],
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) => loading ? null : login(),
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        tooltip:
-                            obscurePassword ? 'Show password' : 'Hide password',
-                        onPressed: () =>
-                            setState(() => obscurePassword = !obscurePassword),
-                        icon: Icon(obscurePassword
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined),
-                      ),
-                      border: const OutlineInputBorder(),
+                  child: const KiitLogo(height: 48),
+                ),
+              ),
+              const SizedBox(height: KiitSpacing.x6),
+              Text(
+                'Welcome to KIIT Attendance',
+                style: Theme.of(context).textTheme.displaySmall,
+              ),
+              const SizedBox(height: KiitSpacing.x3),
+              Text(
+                'Sign in with your institutional student credentials. Your assigned section and timetable are loaded automatically.',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: KiitColors.textSecondary,
                     ),
-                  ),
-                  const SizedBox(height: KiitSpacing.x4),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: loading ? null : login,
-                      icon: loading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.login),
-                      label: Text(loading ? 'Signing in' : 'Continue'),
+              ),
+              const SizedBox(height: KiitSpacing.x8),
+              KiitCard(
+                padding: const EdgeInsets.all(KiitSpacing.x5),
+                shadow: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Student sign in',
+                        style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: KiitSpacing.x1),
+                    Text(
+                      'Use the same roll number registered with KIIT.',
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                  ),
-                  if (error != null) ...[
                     const SizedBox(height: KiitSpacing.x4),
-                    StatusChip(
-                      label: error!,
-                      icon: Icons.error_outline,
-                      tone: StatusTone.error,
+                    TextField(
+                      controller: rollController,
+                      keyboardType: TextInputType.number,
+                      autofillHints: const [AutofillHints.username],
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'Roll number',
+                        hintText: '24155866',
+                        prefixIcon: Icon(Icons.badge_outlined),
+                      ),
                     ),
+                    const SizedBox(height: KiitSpacing.x4),
+                    TextField(
+                      controller: passwordController,
+                      obscureText: obscurePassword,
+                      autofillHints: const [AutofillHints.password],
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => loading ? null : login(),
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          tooltip: obscurePassword
+                              ? 'Show password'
+                              : 'Hide password',
+                          onPressed: () => setState(
+                              () => obscurePassword = !obscurePassword),
+                          icon: Icon(obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: KiitSpacing.x4),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: loading ? null : login,
+                        icon: loading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.login),
+                        label: Text(loading ? 'Signing in' : 'Continue'),
+                      ),
+                    ),
+                    if (error != null) ...[
+                      const SizedBox(height: KiitSpacing.x4),
+                      KiitNoticeBanner(
+                        title: 'Sign in unsuccessful',
+                        message: _friendlyError(error!),
+                        tone: StatusTone.error,
+                      ),
+                    ],
                   ],
+                ),
+              ),
+              const SizedBox(height: KiitSpacing.x5),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.lock_outline_rounded,
+                    size: 16,
+                    color: KiitColors.textMuted,
+                  ),
+                  const SizedBox(width: KiitSpacing.x2),
+                  Flexible(
+                    child: Text(
+                      'Your attendance device remains bound to your student identity.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
                 ],
               ),
-            ),
-            const SizedBox(height: KiitSpacing.x5),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  String _friendlyError(String value) {
+    final normalized = value.toLowerCase();
+    if (normalized.contains('socket') ||
+        normalized.contains('connection') ||
+        normalized.contains('network')) {
+      return 'The attendance service is currently unreachable. Check your connection and try again.';
+    }
+    if (normalized.contains('401') || normalized.contains('credential')) {
+      return 'The roll number or password is incorrect.';
+    }
+    return value.replaceAll(RegExp(r'[_]+'), ' ').trim();
   }
 }

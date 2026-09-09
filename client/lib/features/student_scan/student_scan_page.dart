@@ -7,6 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../core/attendance/attendance_qr_protocol.dart';
 import '../../core/database/local_database.dart';
 import '../../core/security/device_crypto.dart';
+import '../../core/sync/background_sync.dart';
 import '../../ui/kiit_components.dart';
 import '../../ui/kiit_theme.dart';
 
@@ -30,43 +31,68 @@ class _StudentScanPageState extends State<StudentScanPage> {
   @override
   Widget build(BuildContext context) {
     final student = widget.database.getCurrentStudent();
+    final entries = widget.database.getRecentAttendanceLog(limit: 3);
+    final pending = entries.where((entry) => !entry.isServerAccepted).length;
     return Scaffold(
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(KiitSpacing.x5),
+          padding: const EdgeInsets.fromLTRB(
+            KiitSpacing.x4,
+            KiitSpacing.x5,
+            KiitSpacing.x4,
+            KiitSpacing.x8,
+          ),
           children: [
-            Text(
-              'Scan Attendance',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
+            KiitPageHeader(
+              title: 'Scan Attendance',
+              description: student == null
+                  ? 'Sync your KIIT account before scanning a classroom QR.'
+                  : 'Scan the live classroom QR. Your signed proof is saved on this phone first and submitted automatically.',
             ),
-            const SizedBox(height: KiitSpacing.x2),
-            Text(
-              student == null
-                  ? 'Sync your KIIT account before scanning classroom attendance.'
-                  : 'Signed attendance is captured on this phone first. Scan the live classroom QR from inside the app, then sync updates the faculty portal when the backend is reachable.',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: KiitColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-            const SizedBox(height: KiitSpacing.x8),
-            _ScanActionCard(
+            const SizedBox(height: KiitSpacing.x5),
+            if (student != null && pending > 0) ...[
+              KiitNoticeBanner(
+                title:
+                    '$pending attendance ${pending == 1 ? 'record' : 'records'} waiting to sync',
+                message:
+                    'Your local proof is safe. The app will submit it when the attendance server is reachable.',
+                tone: StatusTone.warning,
+              ),
+              const SizedBox(height: KiitSpacing.x4),
+            ],
+            KiitActionTile(
               title: 'Scan Attendance QR',
               description:
-                  'Open the secure in-app scanner for the rotating classroom QR.',
+                  'Open the secure camera for the rotating classroom code.',
               icon: Icons.qr_code_scanner_rounded,
               onTap: _openScanner,
             ),
-            const SizedBox(height: KiitSpacing.x4),
-            _ScanActionCard(
+            const SizedBox(height: KiitSpacing.x3),
+            KiitActionTile(
               title: 'Attendance Logger',
-              description:
-                  'View every local scan, proof state, sync attempt, and review flag.',
+              description: 'Review every scan and its current delivery status.',
               icon: Icons.receipt_long_outlined,
               onTap: _openLogger,
             ),
+            if (entries.isNotEmpty) ...[
+              const SizedBox(height: KiitSpacing.x6),
+              Text(
+                'Recent activity',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: KiitSpacing.x3),
+              KiitCard(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    for (var index = 0; index < entries.length; index++) ...[
+                      _RecentScanRow(entry: entries[index]),
+                      if (index < entries.length - 1) const Divider(),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -90,12 +116,24 @@ class _StudentScanPageState extends State<StudentScanPage> {
         : result.synced
             ? 'Attendance marked for ${result.courseName} and updated.'
             : 'Attendance marked for ${result.courseName}. Sync pending.';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        content: Text(snackMessage),
-      ),
-    );
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                result.synced || result.alreadyScanned
+                    ? Icons.check_circle_rounded
+                    : Icons.cloud_upload_outlined,
+                color: Colors.white,
+              ),
+              const SizedBox(width: KiitSpacing.x3),
+              Expanded(child: Text(snackMessage)),
+            ],
+          ),
+        ),
+      );
     setState(() {});
   }
 
@@ -108,66 +146,66 @@ class _StudentScanPageState extends State<StudentScanPage> {
   }
 }
 
-class _ScanActionCard extends StatelessWidget {
-  const _ScanActionCard({
-    required this.title,
-    required this.description,
-    required this.icon,
-    required this.onTap,
-  });
+class _RecentScanRow extends StatelessWidget {
+  const _RecentScanRow({required this.entry});
 
-  final String title;
-  final String description;
-  final IconData icon;
-  final VoidCallback onTap;
+  final AttendanceLogEntry entry;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(KiitRadius.large),
-        onTap: onTap,
-        child: KiitCard(
-          padding: const EdgeInsets.all(KiitSpacing.x5),
-          child: Row(
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: KiitColors.brandPrimarySoft,
-                  borderRadius: BorderRadius.circular(KiitRadius.medium),
-                ),
-                child: Icon(icon, color: KiitColors.brandPrimaryStrong),
-              ),
-              const SizedBox(width: KiitSpacing.x4),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w900,
-                          ),
-                    ),
-                    const SizedBox(height: KiitSpacing.x1),
-                    Text(
-                      description,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: KiitColors.textSecondary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: KiitSpacing.x3),
-              const Icon(Icons.chevron_right_rounded),
-            ],
+    final accepted = entry.isServerAccepted;
+    final failed = entry.hasDiscrepancy;
+    final color = failed
+        ? KiitColors.error
+        : accepted
+            ? KiitColors.success
+            : KiitColors.warning;
+    final label = failed
+        ? 'Needs review'
+        : accepted
+            ? 'Synchronized'
+            : 'Stored locally';
+    return Padding(
+      padding: const EdgeInsets.all(KiitSpacing.x4),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.09),
+              borderRadius: BorderRadius.circular(KiitRadius.small),
+            ),
+            child: Icon(
+              accepted ? Icons.check_rounded : Icons.schedule_rounded,
+              color: color,
+              size: 20,
+            ),
           ),
-        ),
+          const SizedBox(width: KiitSpacing.x3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${entry.courseCode} · ${entry.sectionCode}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right_rounded, color: KiitColors.textMuted),
+        ],
       ),
     );
   }
@@ -257,6 +295,7 @@ class _AttendanceScannerRouteState extends State<_AttendanceScannerRoute> {
         database: widget.database,
         keyStore: widget.keyStore,
       ).capture(raw);
+      unawaited(scheduleImmediateAttendanceSync());
       HapticFeedback.mediumImpact();
       final synced = created.alreadyScanned
           ? true
@@ -475,8 +514,8 @@ class _ScannerBottomInstruction extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: const Color(0xFF343434).withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(28),
+        color: const Color(0xFF202522).withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(KiitRadius.hero),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Padding(
@@ -729,7 +768,7 @@ class _ScannerError extends StatelessWidget {
               ),
               const SizedBox(height: KiitSpacing.x1),
               Text(
-                'Scanner error: $error',
+                _messageFor(error),
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: const Color(0xFFE5E7EB),
@@ -741,5 +780,16 @@ class _ScannerError extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _messageFor(String code) {
+    final normalized = code.toLowerCase();
+    if (normalized.contains('permission')) {
+      return 'Camera access is required to scan classroom attendance codes.';
+    }
+    if (normalized.contains('unsupported')) {
+      return 'This camera does not support secure QR scanning.';
+    }
+    return 'The camera could not be started. Close the scanner and try again.';
   }
 }

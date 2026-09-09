@@ -51,21 +51,216 @@ class KiitCard extends StatelessWidget {
     required this.child,
     this.padding = const EdgeInsets.all(KiitSpacing.x4),
     this.color,
+    this.borderColor,
+    this.shadow = false,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
   final Color? color;
+  final Color? borderColor;
+  final bool shadow;
 
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color ?? KiitColors.surface,
-        border: Border.all(color: KiitColors.border),
+        border: Border.all(color: borderColor ?? KiitColors.border),
         borderRadius: BorderRadius.circular(KiitRadius.large),
+        boxShadow: shadow
+            ? [
+                BoxShadow(
+                  color: KiitColors.brandPrimaryStrong.withValues(alpha: 0.06),
+                  blurRadius: 22,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
       ),
       child: Padding(padding: padding, child: child),
+    );
+  }
+}
+
+class KiitPageHeader extends StatelessWidget {
+  const KiitPageHeader({
+    super.key,
+    required this.title,
+    required this.description,
+    this.trailing,
+  });
+
+  final String title;
+  final String description;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: KiitSpacing.x2),
+              Text(
+                description,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: KiitColors.textSecondary,
+                    ),
+              ),
+            ],
+          ),
+        ),
+        if (trailing != null) ...[
+          const SizedBox(width: KiitSpacing.x3),
+          trailing!,
+        ],
+      ],
+    );
+  }
+}
+
+class KiitNoticeBanner extends StatelessWidget {
+  const KiitNoticeBanner({
+    super.key,
+    required this.title,
+    required this.message,
+    this.tone = StatusTone.info,
+    this.action,
+  });
+
+  final String title;
+  final String message;
+  final StatusTone tone;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = switch (tone) {
+      StatusTone.success => (KiitColors.success, const Color(0xFFEAF7EE)),
+      StatusTone.warning => (KiitColors.warning, const Color(0xFFFFF7E6)),
+      StatusTone.error => (KiitColors.error, const Color(0xFFFFF0ED)),
+      StatusTone.info => (KiitColors.info, const Color(0xFFEFF6FF)),
+      StatusTone.neutral => (KiitColors.textSecondary, const Color(0xFFF1F5F3)),
+    };
+    final icon = switch (tone) {
+      StatusTone.success => Icons.check_circle_outline_rounded,
+      StatusTone.warning => Icons.cloud_off_outlined,
+      StatusTone.error => Icons.error_outline_rounded,
+      StatusTone.info => Icons.info_outline_rounded,
+      StatusTone.neutral => Icons.notifications_none_rounded,
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(KiitSpacing.x4),
+      decoration: BoxDecoration(
+        color: palette.$2,
+        borderRadius: BorderRadius.circular(KiitRadius.medium),
+        border: Border.all(color: palette.$1.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: palette.$1, size: 22),
+          const SizedBox(width: KiitSpacing.x3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: palette.$1,
+                      ),
+                ),
+                const SizedBox(height: KiitSpacing.x1),
+                Text(
+                  message,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: KiitColors.textSecondary,
+                      ),
+                ),
+                if (action != null) ...[
+                  const SizedBox(height: KiitSpacing.x3),
+                  action!,
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class KiitActionTile extends StatelessWidget {
+  const KiitActionTile({
+    super.key,
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String title;
+  final String description;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: KiitColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(KiitRadius.large),
+        side: const BorderSide(color: KiitColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(KiitSpacing.x4),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: KiitColors.brandPrimarySoft,
+                  borderRadius: BorderRadius.circular(KiitRadius.medium),
+                ),
+                child: Icon(icon, color: KiitColors.brandPrimaryStrong),
+              ),
+              const SizedBox(width: KiitSpacing.x4),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: KiitSpacing.x1),
+                    Text(
+                      description,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: KiitSpacing.x2),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: KiitColors.textSecondary,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

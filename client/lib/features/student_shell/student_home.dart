@@ -58,16 +58,19 @@ class _StudentHomeState extends State<StudentHome> {
     ];
     return Scaffold(
       appBar: AppBar(
+        titleSpacing: KiitSpacing.x4,
         title: const KiitLogo(height: 34),
         actions: [
           if (widget.onSync != null)
             Padding(
               padding: const EdgeInsets.only(right: KiitSpacing.x2),
-              child: SyncStatus(
-                label:
-                    widget.syncError ?? (widget.syncing ? 'Syncing' : 'Synced'),
-                syncing: widget.syncing,
-                offline: widget.syncError != null,
+              child: Center(
+                child: SyncStatus(
+                  label: widget.syncError ??
+                      (widget.syncing ? 'Syncing' : 'Synced'),
+                  syncing: widget.syncing,
+                  offline: widget.syncError != null,
+                ),
               ),
             ),
           if (widget.onSync != null)
@@ -91,32 +94,38 @@ class _StudentHomeState extends State<StudentHome> {
           ),
         ],
       ),
-      body: pages[index],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
-        onDestinationSelected: (value) => setState(() => index = value),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.calendar_today_outlined),
-            selectedIcon: Icon(Icons.calendar_today),
-            label: 'Timetable',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.fact_check_outlined),
-            selectedIcon: Icon(Icons.fact_check),
-            label: 'Attendance',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.qr_code_scanner),
-            selectedIcon: Icon(Icons.qr_code_scanner),
-            label: 'Scan',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.apps_outlined),
-            selectedIcon: Icon(Icons.apps),
-            label: 'Portals',
-          ),
-        ],
+      body: IndexedStack(index: index, children: pages),
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: KiitColors.surface,
+          border: Border(top: BorderSide(color: KiitColors.divider)),
+        ),
+        child: NavigationBar(
+          selectedIndex: index,
+          onDestinationSelected: (value) => setState(() => index = value),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.calendar_today_outlined),
+              selectedIcon: Icon(Icons.calendar_today_rounded),
+              label: 'Timetable',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.fact_check_outlined),
+              selectedIcon: Icon(Icons.fact_check_rounded),
+              label: 'Attendance',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.qr_code_scanner_rounded),
+              selectedIcon: Icon(Icons.qr_code_scanner_rounded),
+              label: 'Scan',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.apps_outlined),
+              selectedIcon: Icon(Icons.apps_rounded),
+              label: 'Portals',
+            ),
+          ],
+        ),
       ),
     );
   }

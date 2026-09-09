@@ -13,6 +13,7 @@ class AttendanceApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'KIIT Attendance',
+      debugShowCheckedModeBanner: false,
       theme: buildKiitTheme(),
       home: const WebAttendanceDashboard(),
     );

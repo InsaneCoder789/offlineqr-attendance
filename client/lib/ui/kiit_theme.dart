@@ -3,18 +3,18 @@ import 'package:flutter/material.dart';
 class KiitColors {
   const KiitColors._();
 
-  static const brandPrimary = Color(0xFF159A53);
-  static const brandPrimaryStrong = Color(0xFF0B6F3A);
-  static const brandPrimarySoft = Color(0xFFE8F7EF);
-  static const brandPrimarySubtle = Color(0xFFF3FBF6);
-  static const background = Color(0xFFF7FAF8);
+  static const brandPrimary = Color(0xFF149447);
+  static const brandPrimaryStrong = Color(0xFF116B38);
+  static const brandPrimarySoft = Color(0xFFE7F5EC);
+  static const brandPrimarySubtle = Color(0xFFF3F9F5);
+  static const background = Color(0xFFF5F7F5);
   static const surface = Color(0xFFFFFFFF);
   static const surfaceElevated = Color(0xFFFFFFFF);
-  static const textPrimary = Color(0xFF17211D);
-  static const textSecondary = Color(0xFF52615A);
-  static const textMuted = Color(0xFF7A8781);
-  static const border = Color(0xFFDDE7E1);
-  static const divider = Color(0xFFE8EFEA);
+  static const textPrimary = Color(0xFF15201A);
+  static const textSecondary = Color(0xFF56635C);
+  static const textMuted = Color(0xFF849089);
+  static const border = Color(0xFFDCE4DF);
+  static const divider = Color(0xFFE7ECE9);
   static const success = Color(0xFF15803D);
   static const warning = Color(0xFFB7791F);
   static const error = Color(0xFFB42318);
@@ -41,7 +41,8 @@ class KiitRadius {
 
   static const small = 8.0;
   static const medium = 12.0;
-  static const large = 16.0;
+  static const large = 18.0;
+  static const hero = 22.0;
 }
 
 ThemeData buildKiitTheme() {
@@ -57,17 +58,17 @@ ThemeData buildKiitTheme() {
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: KiitColors.background,
-    fontFamily: 'Roboto',
+    visualDensity: VisualDensity.standard,
     textTheme: const TextTheme(
       displaySmall: TextStyle(
-        fontSize: 36,
-        height: 1.05,
+        fontSize: 34,
+        height: 1.08,
         fontWeight: FontWeight.w800,
         color: KiitColors.textPrimary,
       ),
       headlineMedium: TextStyle(
-        fontSize: 26,
-        height: 1.15,
+        fontSize: 28,
+        height: 1.12,
         fontWeight: FontWeight.w800,
         color: KiitColors.textPrimary,
       ),
@@ -91,7 +92,7 @@ ThemeData buildKiitTheme() {
       ),
       bodyLarge: TextStyle(
         fontSize: 16,
-        height: 1.45,
+        height: 1.42,
         color: KiitColors.textPrimary,
       ),
       bodyMedium: TextStyle(
@@ -118,16 +119,22 @@ ThemeData buildKiitTheme() {
       scrolledUnderElevation: 0,
       backgroundColor: KiitColors.surface,
       foregroundColor: KiitColors.textPrimary,
+      toolbarHeight: 68,
+      surfaceTintColor: Colors.transparent,
       titleTextStyle: TextStyle(
-        fontSize: 18,
+        fontSize: 19,
         fontWeight: FontWeight.w800,
         color: KiitColors.textPrimary,
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
       elevation: 0,
+      height: 72,
       backgroundColor: KiitColors.surface,
       indicatorColor: KiitColors.brandPrimarySoft,
+      indicatorShape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => TextStyle(
           fontSize: 12,
@@ -144,7 +151,7 @@ ThemeData buildKiitTheme() {
       style: FilledButton.styleFrom(
         backgroundColor: KiitColors.brandPrimary,
         foregroundColor: Colors.white,
-        minimumSize: const Size(48, 48),
+        minimumSize: const Size(48, 52),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(KiitRadius.medium),
         ),
@@ -154,7 +161,7 @@ ThemeData buildKiitTheme() {
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: KiitColors.brandPrimaryStrong,
-        minimumSize: const Size(48, 48),
+        minimumSize: const Size(48, 52),
         side: const BorderSide(color: KiitColors.border),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(KiitRadius.medium),
@@ -175,6 +182,43 @@ ThemeData buildKiitTheme() {
       color: KiitColors.divider,
       thickness: 1,
       space: 1,
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: KiitColors.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      labelStyle: const TextStyle(color: KiitColors.textSecondary),
+      hintStyle: const TextStyle(color: KiitColors.textMuted),
+      prefixIconColor: KiitColors.textSecondary,
+      suffixIconColor: KiitColors.textSecondary,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(KiitRadius.medium),
+        borderSide: const BorderSide(color: KiitColors.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(KiitRadius.medium),
+        borderSide: const BorderSide(color: KiitColors.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(KiitRadius.medium),
+        borderSide:
+            const BorderSide(color: KiitColors.brandPrimary, width: 1.6),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(KiitRadius.medium),
+        borderSide: const BorderSide(color: KiitColors.error),
+      ),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: KiitColors.textPrimary,
+      contentTextStyle: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.w700,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(KiitRadius.medium),
+      ),
     ),
   );
 }

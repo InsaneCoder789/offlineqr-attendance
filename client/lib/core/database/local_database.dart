@@ -245,7 +245,7 @@ class LocalAttendanceDatabase {
     return LocalAttendanceDatabase(sqlite3.open(path))..migrate();
   }
 
-  void close() => _db.dispose();
+  void close() => _db.close();
 
   void migrate() {
     _db.execute('PRAGMA foreign_keys = ON;');

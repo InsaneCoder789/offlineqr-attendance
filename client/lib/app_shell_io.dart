@@ -45,6 +45,7 @@ class _AttendanceAppState extends State<AttendanceApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'KIIT Attendance',
+      debugShowCheckedModeBanner: false,
       theme: buildKiitTheme(),
       onUnknownRoute: (_) => MaterialPageRoute<void>(
         builder: (_) => const KiitNotFoundPage(),
@@ -53,16 +54,24 @@ class _AttendanceAppState extends State<AttendanceApp> {
         future: _databaseFuture,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Scaffold(
-              body: Center(
-                child: Text('Local database error: ${snapshot.error}'),
+            return const Scaffold(
+              body: SafeArea(
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(KiitSpacing.x5),
+                    child: KiitNoticeBanner(
+                      title: 'Attendance storage unavailable',
+                      message:
+                          'The app could not open its protected local records. Restart the app before attempting attendance.',
+                      tone: StatusTone.error,
+                    ),
+                  ),
+                ),
               ),
             );
           }
           if (!snapshot.hasData) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
+            return const _AppLaunchScreen();
           }
           return StudentAppShell(
             database: snapshot.data!,
@@ -222,7 +231,7 @@ class _StudentAppShellState extends State<StudentAppShell>
   @override
   Widget build(BuildContext context) {
     if (checkingSession) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const _AppLaunchScreen();
     }
     if (!loggedIn) {
       return StudentLoginPage(
@@ -246,6 +255,50 @@ class _StudentAppShellState extends State<StudentAppShell>
       onAttendanceRecorded: () => _syncInternal(forceProofSync: true),
       syncing: syncing,
       syncError: syncError,
+    );
+  }
+}
+
+class _AppLaunchScreen extends StatelessWidget {
+  const _AppLaunchScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: KiitColors.surface,
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 104,
+                height: 104,
+                padding: const EdgeInsets.all(KiitSpacing.x4),
+                decoration: BoxDecoration(
+                  color: KiitColors.brandPrimarySubtle,
+                  borderRadius: BorderRadius.circular(KiitRadius.hero),
+                  border: Border.all(color: KiitColors.border),
+                ),
+                child: Image.asset(
+                  'assets/branding/app_icon/kiit_splash_mark_1024.png',
+                ),
+              ),
+              const SizedBox(height: KiitSpacing.x5),
+              Text(
+                'KIIT Attendance',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: KiitSpacing.x4),
+              const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

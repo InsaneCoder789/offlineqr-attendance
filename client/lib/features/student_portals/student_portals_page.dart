@@ -16,21 +16,22 @@ class StudentPortalsPage extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(KiitSpacing.x4),
+          padding: const EdgeInsets.fromLTRB(
+            KiitSpacing.x4,
+            KiitSpacing.x5,
+            KiitSpacing.x4,
+            KiitSpacing.x8,
+          ),
           children: [
-            Text(
-              'KIIT Portals',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            const SizedBox(height: KiitSpacing.x2),
-            Text(
-              'Quick access to academic systems used alongside attendance.',
-              style: Theme.of(context).textTheme.bodyMedium,
+            const KiitPageHeader(
+              title: 'KIIT services',
+              description:
+                  'Open the university services connected to your academic life.',
             ),
             const SizedBox(height: KiitSpacing.x5),
             _PortalTile(
               title: 'KIIT SAP Portal',
-              subtitle: 'Academic profile, exam, fee, and university records',
+              subtitle: 'Academic profile, examinations, fees and records',
               url: sapPortal,
               child: const KiitLogo(height: 42),
             ),
@@ -73,20 +74,59 @@ class _PortalTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return KiitCard(
-      child: ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: SizedBox(
-          width: 54,
-          height: 54,
-          child: Center(child: child),
-        ),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.open_in_new),
+    return Material(
+      color: KiitColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(KiitRadius.large),
+        side: const BorderSide(color: KiitColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
         onTap: () async {
-          await launchUrl(url, mode: LaunchMode.externalApplication);
+          final opened = await launchUrl(
+            url,
+            mode: LaunchMode.externalApplication,
+          );
+          if (!opened && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('$title could not be opened.')),
+            );
+          }
         },
+        child: Padding(
+          padding: const EdgeInsets.all(KiitSpacing.x4),
+          child: Row(
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                padding: const EdgeInsets.all(KiitSpacing.x2),
+                decoration: BoxDecoration(
+                  color: KiitColors.brandPrimarySubtle,
+                  borderRadius: BorderRadius.circular(KiitRadius.medium),
+                ),
+                child: Center(child: child),
+              ),
+              const SizedBox(width: KiitSpacing.x4),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: KiitSpacing.x1),
+                    Text(subtitle,
+                        style: Theme.of(context).textTheme.bodyMedium),
+                  ],
+                ),
+              ),
+              const SizedBox(width: KiitSpacing.x2),
+              const Icon(
+                Icons.open_in_new_rounded,
+                color: KiitColors.brandPrimaryStrong,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
