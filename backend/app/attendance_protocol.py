@@ -12,7 +12,6 @@ from .device_crypto import b64url_decode, b64url_encode
 ATTENDANCE_QR_PROTOCOL = "ATTENDANCE_QR_V1"
 SESSION_AUTHORIZATION_PROTOCOL = "SESSION_AUTHORIZATION_V1"
 ATTENDANCE_CLAIM_PROTOCOL = "ATTENDANCE_CLAIM_V1"
-INSTITUTION_KEY_ID = "institution-root-2026-01"
 QR_EPOCH_SECONDS = 5
 CLAIM_SECONDS = 60
 CLOCK_SKEW_SECONDS = 2
@@ -28,6 +27,10 @@ def institution_signing_key() -> SigningKey:
 
 def institution_public_key() -> str:
     return b64url_encode(bytes(institution_signing_key().verify_key))
+
+
+def institution_key_id() -> str:
+    return get_settings().institution_signing_key_id
 
 
 def epoch_for(now: datetime, origin: datetime) -> int:

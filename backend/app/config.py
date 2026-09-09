@@ -10,6 +10,7 @@ class Settings:
     dev_student_id: str
     dev_faculty_id: str
     institution_signing_seed_b64url: str
+    institution_signing_key_id: str
     redis_url: str
     redis_required: bool
     faculty_session_ttl_seconds: int
@@ -55,6 +56,10 @@ def get_settings() -> Settings:
             "INSTITUTION_SIGNING_SEED_B64URL",
             "ERERERERERERERERERERERERERERERERERERERERERE",
         ),
+        institution_signing_key_id=os.environ.get(
+            "INSTITUTION_SIGNING_KEY_ID",
+            "institution-root-2026-01",
+        ),
         redis_url=os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0"),
         redis_required=os.environ.get("REDIS_REQUIRED", "").lower() in {"1", "true", "yes"}
         or os.environ.get("APP_ENV", "development") != "development",
@@ -86,6 +91,8 @@ def validate_production_settings() -> None:
         return
     if settings.institution_signing_seed_b64url == "ERERERERERERERERERERERERERERERERERERERERERE":
         raise RuntimeError("INSTITUTION_SIGNING_SEED_B64URL must be set outside development")
+    if not settings.institution_signing_key_id.startswith("institution-root-"):
+        raise RuntimeError("INSTITUTION_SIGNING_KEY_ID must identify a versioned institution root")
     if not settings.redis_required:
         raise RuntimeError("REDIS_REQUIRED must remain enabled outside development")
     if not settings.redis_url.startswith(("redis://", "rediss://")):

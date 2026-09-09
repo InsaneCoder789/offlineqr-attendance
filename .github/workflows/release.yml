@@ -1,12 +1,14 @@
-name: Release Containers
+name: Controlled Releases
 
 on:
   push:
     tags: ["v*"]
 
 permissions:
-  contents: read
+  contents: write
   packages: write
+  id-token: write
+  attestations: write
 
 jobs:
   publish:
@@ -42,3 +44,55 @@ jobs:
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
+
+  android:
+    name: Signed Android release evidence
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.2"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Provision release signing material
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_STORE_PASSWORD"
+          test -n "$ANDROID_KEY_PASSWORD"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/release.jks
+          {
+            printf 'storeFile=../release.jks\n'
+            printf 'storePassword=%s\n' "$ANDROID_STORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
+          } > android/keystore.properties
+          chmod 600 android/release.jks android/keystore.properties
+      - run: flutter build apk --release --split-per-abi
+      - name: Verify 16 KB package boundaries
+        working-directory: .
+        run: |
+          for apk in client/build/app/outputs/flutter-apk/*-release.apk; do
+            scripts/check_android_16kb.sh "$apk"
+          done
+      - name: Create checksums
+        run: sha256sum build/app/outputs/flutter-apk/*-release.apk > build/app/outputs/flutter-apk/SHA256SUMS
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: client/build/app/outputs/flutter-apk/*-release.apk
+      - name: Publish controlled release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || gh release create "${GITHUB_REF_NAME}" --verify-tag --generate-notes
+          gh release upload "${GITHUB_REF_NAME}" build/app/outputs/flutter-apk/*-release.apk build/app/outputs/flutter-apk/SHA256SUMS --clobber

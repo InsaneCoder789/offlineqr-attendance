@@ -11,7 +11,6 @@ from nacl.signing import SigningKey
 from .attendance_protocol import (
     ATTENDANCE_QR_PROTOCOL,
     CLOCK_SKEW_SECONDS,
-    INSTITUTION_KEY_ID,
     QR_EPOCH_SECONDS,
     SESSION_AUTHORIZATION_PROTOCOL,
     canonical_attendance_claim,
@@ -20,6 +19,7 @@ from .attendance_protocol import (
     epoch_for,
     epoch_window,
     institution_public_key,
+    institution_key_id,
     institution_signing_key,
     sign,
     verify,
@@ -1071,7 +1071,7 @@ def _proof_rejection(proof_id, error_code: str, retryable: bool) -> dict:
 
 def trust_root() -> dict:
     return {
-        "key_id": INSTITUTION_KEY_ID,
+        "key_id": institution_key_id(),
         "algorithm": "Ed25519",
         "public_key": institution_public_key(),
     }

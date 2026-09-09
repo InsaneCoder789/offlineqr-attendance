@@ -1,0 +1,34 @@
+name: iOS Build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Simulator compile and privacy configuration
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.2"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: plutil -lint ios/Runner/Info.plist
+      - run: /usr/libexec/PlistBuddy -c "Print :NSCameraUsageDescription" ios/Runner/Info.plist
+      - run: /usr/libexec/PlistBuddy -c "Print :UIBackgroundModes:0" ios/Runner/Info.plist | grep -Fx fetch
+      - run: /usr/libexec/PlistBuddy -c "Print :BGTaskSchedulerPermittedIdentifiers:0" ios/Runner/Info.plist | grep -Fx in.ac.kiit.offlineqrattendance.sync.periodic
+      - run: flutter build ios --simulator --debug

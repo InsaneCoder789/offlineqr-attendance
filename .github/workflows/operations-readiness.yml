@@ -1,0 +1,82 @@
+name: Operations Readiness
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: operations-readiness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Backup, restore, and deployment boundaries
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: attendance_recovery
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/attendance_recovery
+      BACKUP_ENCRYPTION_PASSPHRASE: ci-only-recovery-passphrase
+      REDIS_URL: redis://127.0.0.1:6379/0
+      REDIS_REQUIRED: "true"
+      APP_ENV: development
+      PGHOST: 127.0.0.1
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -r backend/requirements.txt
+      - run: bash -n scripts/backup_postgres.sh scripts/restore_postgres.sh scripts/check_android_16kb.sh
+      - run: python -m py_compile scripts/load_smoke.py scripts/generate_signing_root.py
+      - name: Validate signing-root rotation utility
+        run: |
+          python scripts/generate_signing_root.py institution-root-2099-01 "$RUNNER_TEMP/signing-root"
+          test "$(stat -c '%a' "$RUNNER_TEMP/signing-root/institution-root-2099-01.env")" = "600"
+          grep -q '"algorithm": "Ed25519"' "$RUNNER_TEMP/signing-root/institution-root-2099-01.public.json"
+      - run: |
+          grep -q '^INSTITUTION_TIMEZONE=Asia/Kolkata$' .env.example
+          grep -q '^PASSWORD_AUTH_ENABLED=true$' .env.example
+      - name: Prove encrypted backup and restore
+        run: |
+          psql "$DATABASE_URL" -c 'CREATE TABLE recovery_probe (id integer PRIMARY KEY); INSERT INTO recovery_probe VALUES (1);'
+          backup="$(scripts/backup_postgres.sh "$RUNNER_TEMP/backups")"
+          psql "$DATABASE_URL" -c 'DROP TABLE recovery_probe;'
+          scripts/restore_postgres.sh "$backup"
+          test "$(psql "$DATABASE_URL" -Atc 'SELECT count(*) FROM recovery_probe')" = "1"
+      - name: Exercise readiness under concurrent load
+        run: |
+          DB_NAME=attendance_recovery scripts/db_reset.sh
+          uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/api.log" 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid"' EXIT
+          for attempt in $(seq 1 30); do
+            curl --fail --silent http://127.0.0.1:8000/api/v1/health/ready && break
+            sleep 1
+          done
+          python scripts/load_smoke.py --requests 300 --workers 30
