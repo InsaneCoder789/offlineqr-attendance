@@ -20,6 +20,10 @@ class StudentLoginIn(BaseModel):
     password: str
 
 
+class OidcTokenIn(BaseModel):
+    id_token: str
+
+
 class StudentLoginOut(StudentOut):
     access_token: str
     token_type: str = "Bearer"

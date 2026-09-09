@@ -40,6 +40,8 @@ class EnrollmentCompleteIn(BaseModel):
     app_instance_metadata: dict = Field(default_factory=dict)
     device_profile: DeviceProfileIn = Field(default_factory=DeviceProfileIn)
     key_protection: str = "SOFTWARE_PROTECTED"
+    attestation_provider: str | None = Field(default=None, pattern="^(PLAY_INTEGRITY|APPLE_APP_ATTEST)$")
+    attestation_token: str | None = Field(default=None, min_length=32, max_length=16384)
 
 
 class DeviceRegistrationOut(BaseModel):
@@ -89,6 +91,8 @@ class ReplacementRequestIn(BaseModel):
     app_instance_metadata: dict = Field(default_factory=dict)
     device_profile: DeviceProfileIn = Field(default_factory=DeviceProfileIn)
     key_protection: str = "SOFTWARE_PROTECTED"
+    attestation_provider: str | None = Field(default=None, pattern="^(PLAY_INTEGRITY|APPLE_APP_ATTEST)$")
+    attestation_token: str | None = Field(default=None, min_length=32, max_length=16384)
 
 
 class ReplacementRequestOut(BaseModel):

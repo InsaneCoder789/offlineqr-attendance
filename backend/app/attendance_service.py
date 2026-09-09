@@ -27,6 +27,7 @@ from .attendance_protocol import (
 from .config import get_settings
 from .device_crypto import verify_signature
 from .errors import ApiError
+from .institution_clock import institution_local_to_utc, institution_today
 from .presence_protocol import (
     ATTENDANCE_PROOF_PROTOCOL,
     canonical_attendance_proof,
@@ -39,7 +40,7 @@ def _connect():
 
 
 def today_faculty_classes(faculty_id: UUID, today: date | None = None) -> list[dict]:
-    current = today or datetime.now(UTC).date()
+    current = today or institution_today()
     day = current.isoweekday()
     with _connect() as conn:
         rows = conn.execute(
@@ -70,7 +71,7 @@ def today_faculty_classes(faculty_id: UUID, today: date | None = None) -> list[d
 
 
 def student_timetable(student_id: UUID, today: date | None = None) -> list[dict]:
-    current = today or datetime.now(UTC).date()
+    current = today or institution_today()
     day = current.isoweekday()
     with _connect() as conn:
         rows = conn.execute(
@@ -89,9 +90,85 @@ def student_timetable(student_id: UUID, today: date | None = None) -> list[dict]
         return [dict(row) for row in rows]
 
 
+def prepare_attendance_session(faculty_id: UUID, course_offering_id: UUID) -> dict:
+    """Pre-authorize a scheduled class so its QR can be hosted without internet."""
+    now = datetime.now(UTC)
+    current = institution_today(now)
+    day = current.isoweekday()
+    with _connect() as conn:
+        with conn.transaction():
+            _require_faculty_offering(conn, faculty_id, course_offering_id)
+            entry = conn.execute(
+                """
+                SELECT start_time, end_time, room
+                FROM timetable_entries
+                WHERE course_offering_id = %s AND day_of_week = %s
+                  AND valid_from <= %s AND valid_until >= %s AND active = true
+                ORDER BY start_time
+                LIMIT 1
+                """,
+                [course_offering_id, day, current, current],
+            ).fetchone()
+            if entry is None:
+                raise ApiError("TIMETABLE_ENTRY_NOT_FOUND", "No class is scheduled today.", 404)
+
+            scheduled_start = institution_local_to_utc(current, entry["start_time"])
+            scheduled_end = institution_local_to_utc(current, entry["end_time"])
+            existing = conn.execute(
+                """
+                SELECT id FROM attendance_sessions
+                WHERE course_offering_id = %s AND scheduled_start = %s
+                  AND state IN ('CREATED', 'ACTIVE', 'SYNCING')
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                [course_offering_id, scheduled_start],
+            ).fetchone()
+            if existing is None:
+                existing = conn.execute(
+                    """
+                    INSERT INTO attendance_sessions (
+                        course_offering_id, created_by_faculty_id, scheduled_start,
+                        scheduled_end, started_at, state
+                    )
+                    VALUES (%s, %s, %s, %s, %s, 'CREATED')
+                    RETURNING id
+                    """,
+                    [course_offering_id, faculty_id, scheduled_start, scheduled_end, now],
+                ).fetchone()
+                _snapshot_roster(conn, existing["id"])
+                _audit(
+                    conn,
+                    "ATTENDANCE_SESSION_PREPARED",
+                    "attendance_session",
+                    existing["id"],
+                    str(faculty_id),
+                )
+            session_id = existing["id"]
+            authorization = _ensure_authorization(
+                conn,
+                session_id,
+                faculty_id,
+                course_offering_id,
+                scheduled_start,
+                scheduled_end,
+            )
+            session = _session_by_id(conn, session_id)
+            session["authorization"] = authorization
+            return session
+
+
+def prepare_today_attendance_sessions(faculty_id: UUID) -> list[dict]:
+    prepared = []
+    for item in today_faculty_classes(faculty_id):
+        prepared.append(
+            prepare_attendance_session(faculty_id, item["course_offering_id"])
+        )
+    return prepared
+
+
 def start_attendance_session(faculty_id: UUID, course_offering_id: UUID) -> dict:
     now = datetime.now(UTC)
-    current = now.date()
+    current = institution_today(now)
     day = current.isoweekday()
     with _connect() as conn:
         with conn.transaction():
@@ -119,8 +196,8 @@ def start_attendance_session(faculty_id: UUID, course_offering_id: UUID) -> dict
             if entry is None:
                 raise ApiError("TIMETABLE_ENTRY_NOT_FOUND", "No class is scheduled today.", 404)
 
-            scheduled_start = _combine(current, entry["start_time"])
-            scheduled_end = _combine(current, entry["end_time"])
+            scheduled_start = institution_local_to_utc(current, entry["start_time"])
+            scheduled_end = institution_local_to_utc(current, entry["end_time"])
             existing = conn.execute(
                 """
                 SELECT id, state::text AS state FROM attendance_sessions
@@ -610,7 +687,11 @@ def submit_attendance_proof_submission(submission: dict) -> dict:
         return _proof_rejection(
             submission.get("proof", {}).get("proof_id"),
             exc.code,
-            retryable=False,
+            retryable=exc.code in {
+                "SESSION_ACTIVATION_PENDING",
+                "COORDINATION_UNAVAILABLE",
+                "TEMPORARY_DATABASE_ERROR",
+            },
         )
 
 
@@ -823,6 +904,12 @@ def _ensure_claim_for_proof(conn, payload: dict, public_key: str, session: dict)
     captured_at = _aware(payload["qr_captured_at"])
     created_at = _aware(payload["claim_created_at"])
     expires_at = _aware(payload["claim_expires_at"])
+    if session["state"] == "CREATED":
+        raise ApiError(
+            "SESSION_ACTIVATION_PENDING",
+            "The offline faculty session has not synchronized yet.",
+            409,
+        )
     if session["state"] not in ("ACTIVE", "SYNCING"):
         raise ApiError("SESSION_RECONCILED", "This attendance session no longer accepts proofs.", 409)
     reconcile_until = session.get("reconcile_until")

@@ -21,6 +21,7 @@ from .device_crypto import (
     public_key_fingerprint,
     verify_signature,
 )
+from .device_attestation import verify_device_attestation
 from .errors import ApiError
 from .redis_service import consume_rate_limit
 
@@ -79,6 +80,8 @@ def complete_enrollment(
     app_instance_metadata: dict,
     device_profile: dict[str, Any],
     key_protection: str,
+    attestation_provider: str | None = None,
+    attestation_token: str | None = None,
 ) -> dict[str, Any]:
     if public_key_algorithm != SUPPORTED_ALGORITHM:
         raise ApiError("UNSUPPORTED_DEVICE_ALGORITHM", "Unsupported device key algorithm.", 400)
@@ -118,6 +121,16 @@ def complete_enrollment(
                     "Device signature could not be verified.",
                     400,
                 )
+
+            profile.update(
+                verify_device_attestation(
+                    provider=attestation_provider,
+                    token=attestation_token,
+                    platform=platform,
+                    challenge_id=challenge_id,
+                    public_key_fingerprint=fingerprint,
+                )
+            )
 
             active = _active_device(conn, student_id)
             if active is not None:
@@ -286,6 +299,8 @@ def request_replacement(
     app_instance_metadata: dict,
     device_profile: dict[str, Any],
     key_protection: str,
+    attestation_provider: str | None = None,
+    attestation_token: str | None = None,
 ) -> dict[str, Any]:
     if public_key_algorithm != SUPPORTED_ALGORITHM:
         raise ApiError("UNSUPPORTED_DEVICE_ALGORITHM", "Unsupported device key algorithm.", 400)
@@ -317,6 +332,16 @@ def request_replacement(
                 signature_b64url=signature,
             ):
                 raise ApiError("INVALID_DEVICE_SIGNATURE", "Invalid replacement signature.", 400)
+
+            profile.update(
+                verify_device_attestation(
+                    provider=attestation_provider,
+                    token=attestation_token,
+                    platform=platform,
+                    challenge_id=challenge_id,
+                    public_key_fingerprint=fingerprint,
+                )
+            )
 
             existing_request = conn.execute(
                 """SELECT id FROM device_replacement_requests

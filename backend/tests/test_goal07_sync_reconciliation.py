@@ -100,16 +100,50 @@ class Goal07SyncReconciliationTest(unittest.TestCase):
 
     def test_proof_scanned_before_close_reconciles_during_sync_window(self) -> None:
         submission = self._submission()
+        session_id = submission["proof"]["session_id"]
         closed = self.client.post(
-            f"/api/v1/faculty/attendance-sessions/{submission['proof']['session_id']}/close",
+            f"/api/v1/faculty/attendance-sessions/{session_id}/close",
             headers={"x-faculty-id": str(self._student_today_faculty_and_offering()[0])},
         )
         response = self.client.post("/api/v1/attendance/proofs", json=submission)
+        roster = self.client.get(
+            f"/api/v1/faculty/attendance-sessions/{session_id}/roster",
+            headers={"x-faculty-id": str(self._student_today_faculty_and_offering()[0])},
+        )
 
         self.assertEqual(closed.status_code, 200, closed.text)
         self.assertEqual(closed.json()["state"], "SYNCING")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["result"], "ACCEPTED")
+        self.assertEqual(roster.status_code, 200, roster.text)
+        student = next(
+            item for item in roster.json() if item["student_id"] == str(DEV_STUDENT_ID)
+        )
+        self.assertEqual(student["attendance_status"], "PRESENT")
+        self.assertEqual(student["attendance_method"], "SECURE_PROOF")
+
+    def test_offline_package_reuses_prepared_session_when_connectivity_returns(self) -> None:
+        faculty_id, offering_id = self._student_today_faculty_and_offering()
+        prepared_response = self.client.post(
+            "/api/v1/faculty/attendance-sessions/offline-package",
+            headers={"x-faculty-id": str(faculty_id)},
+        )
+        self.assertEqual(prepared_response.status_code, 200, prepared_response.text)
+        prepared = next(
+            item for item in prepared_response.json()
+            if item["course_offering_id"] == str(offering_id)
+        )
+        self.assertEqual(prepared["state"], "CREATED")
+        self.assertTrue(prepared["authorization"]["session_private_key"])
+
+        activated = self.client.post(
+            "/api/v1/faculty/attendance-sessions/start",
+            headers={"x-faculty-id": str(faculty_id)},
+            json={"course_offering_id": str(offering_id)},
+        )
+        self.assertEqual(activated.status_code, 200, activated.text)
+        self.assertEqual(activated.json()["id"], prepared["id"])
+        self.assertEqual(activated.json()["state"], "ACTIVE")
 
     def _submission(self) -> dict:
         faculty_id, offering_id = self._student_today_faculty_and_offering()
@@ -220,6 +254,8 @@ class Goal07SyncReconciliationTest(unittest.TestCase):
         return b64url_encode(self.key.sign(payload).signature)
 
     def _student_today_faculty_and_offering(self) -> tuple[UUID, UUID]:
+        from backend.app.institution_clock import institution_today
+
         with psycopg.connect(get_settings().database_url) as conn:
             row = conn.execute(
                 """
@@ -228,12 +264,12 @@ class Goal07SyncReconciliationTest(unittest.TestCase):
                 JOIN enrollments e ON e.course_offering_id = te.course_offering_id
                 JOIN faculty_assignments fa ON fa.course_offering_id = te.course_offering_id
                 WHERE e.student_id = %s
-                  AND te.day_of_week = EXTRACT(ISODOW FROM now())::int
+                  AND te.day_of_week = %s
                   AND fa.active = true
                 ORDER BY te.start_time
                 LIMIT 1
                 """,
-                [DEV_STUDENT_ID],
+                [DEV_STUDENT_ID, institution_today().isoweekday()],
             ).fetchone()
         self.assertIsNotNone(row)
         return row[0], row[1]

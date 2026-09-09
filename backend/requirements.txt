@@ -7,3 +7,4 @@ httpx==0.28.1
 PyNaCl==1.6.2
 argon2-cffi==25.1.0
 redis==8.1.0
+PyJWT[crypto]==2.13.0

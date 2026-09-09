@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import os
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,15 @@ class Settings:
     student_session_ttl_seconds: int
     faculty_cookie_secure: bool
     cors_allowed_origins: tuple[str, ...]
+    institution_timezone: str
+    oidc_issuer: str
+    oidc_client_id: str
+    oidc_client_secret: str
+    oidc_jwks_url: str
+    password_auth_enabled: bool
+    device_attestation_required: bool
+    device_attestation_verifier_url: str
+    device_attestation_verifier_token: str
 
     @property
     def development_enabled(self) -> bool:
@@ -53,6 +63,19 @@ def get_settings() -> Settings:
         faculty_cookie_secure=os.environ.get("FACULTY_COOKIE_SECURE", "").lower() in {"1", "true", "yes"}
         or os.environ.get("APP_ENV", "development") != "development",
         cors_allowed_origins=configured_origins,
+        institution_timezone=os.environ.get("INSTITUTION_TIMEZONE", "Asia/Kolkata"),
+        oidc_issuer=os.environ.get("OIDC_ISSUER", ""),
+        oidc_client_id=os.environ.get("OIDC_CLIENT_ID", ""),
+        oidc_client_secret=os.environ.get("OIDC_CLIENT_SECRET", ""),
+        oidc_jwks_url=os.environ.get("OIDC_JWKS_URL", ""),
+        password_auth_enabled=os.environ.get(
+            "PASSWORD_AUTH_ENABLED",
+            "true" if os.environ.get("APP_ENV", "development") == "development" else "false",
+        ).lower() in {"1", "true", "yes"},
+        device_attestation_required=os.environ.get("DEVICE_ATTESTATION_REQUIRED", "").lower()
+        in {"1", "true", "yes"},
+        device_attestation_verifier_url=os.environ.get("DEVICE_ATTESTATION_VERIFIER_URL", ""),
+        device_attestation_verifier_token=os.environ.get("DEVICE_ATTESTATION_VERIFIER_TOKEN", ""),
     )
 
 
@@ -71,3 +94,19 @@ def validate_production_settings() -> None:
         raise RuntimeError("FACULTY_COOKIE_SECURE must remain enabled outside development")
     if not settings.cors_allowed_origins:
         raise RuntimeError("CORS_ALLOWED_ORIGINS must list the deployed faculty portal origins outside development")
+    try:
+        ZoneInfo(settings.institution_timezone)
+    except ZoneInfoNotFoundError as exc:
+        raise RuntimeError("INSTITUTION_TIMEZONE must be a valid IANA timezone") from exc
+    if not settings.oidc_issuer or not settings.oidc_client_id or not settings.oidc_client_secret or not settings.oidc_jwks_url:
+        raise RuntimeError("OIDC issuer, client ID, client secret, and JWKS URL are required outside development")
+    if not settings.oidc_issuer.startswith("https://"):
+        raise RuntimeError("OIDC_ISSUER must use HTTPS outside development")
+    if not settings.device_attestation_required:
+        raise RuntimeError("DEVICE_ATTESTATION_REQUIRED must remain enabled outside development")
+    if not settings.device_attestation_verifier_url.startswith("https://"):
+        raise RuntimeError("DEVICE_ATTESTATION_VERIFIER_URL must use HTTPS outside development")
+    if len(settings.device_attestation_verifier_token) < 32:
+        raise RuntimeError("DEVICE_ATTESTATION_VERIFIER_TOKEN must be a strong server credential")
+    if settings.password_auth_enabled:
+        raise RuntimeError("PASSWORD_AUTH_ENABLED must be disabled outside development")
