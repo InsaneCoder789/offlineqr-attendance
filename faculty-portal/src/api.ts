@@ -39,6 +39,12 @@ export type FacultySession = {
   closed_at: string | null;
   state: string;
   authorization: SessionAuthorization;
+  offline_pending_activation?: boolean;
+};
+
+type PendingSessionClose = {
+  sessionId: string;
+  courseOfferingId: string;
 };
 
 export type RosterStudent = {
@@ -251,6 +257,66 @@ export async function startSession(courseOfferingId: string): Promise<FacultySes
   return session;
 }
 
+export async function prepareOfflineSessions(): Promise<FacultySession[]> {
+  const response = await apiFetch("/api/v1/faculty/attendance-sessions/offline-package", {
+    method: "POST",
+  });
+  if (!response.ok) throw new Error("Could not prepare offline attendance sessions");
+  const sessions = (await response.json()) as FacultySession[];
+  localStorage.setItem("faculty.offlineSessions", JSON.stringify(sessions));
+  return sessions;
+}
+
+export function cachedOfflineSessions(): FacultySession[] {
+  return JSON.parse(localStorage.getItem("faculty.offlineSessions") ?? "[]") as FacultySession[];
+}
+
+export function startCachedOfflineSession(courseOfferingId: string): FacultySession {
+  const prepared = cachedOfflineSessions().find(
+    (item) => item.course_offering_id === courseOfferingId && new Date(item.authorization.valid_until) > new Date(),
+  );
+  if (!prepared?.authorization.session_private_key) {
+    throw new Error("This class was not prepared for offline attendance. Connect once before class to refresh it.");
+  }
+  const session: FacultySession = {
+    ...prepared,
+    state: "ACTIVE",
+    offline_pending_activation: true,
+  };
+  localStorage.setItem("faculty.activeSession", JSON.stringify(session));
+  return session;
+}
+
+export function queueOfflineSessionClose(session: FacultySession): void {
+  const pending = pendingSessionCloses().filter((item) => item.sessionId !== session.id);
+  pending.push({ sessionId: session.id, courseOfferingId: session.course_offering_id });
+  localStorage.setItem("faculty.pendingSessionCloses", JSON.stringify(pending));
+  localStorage.removeItem("faculty.activeSession");
+}
+
+export function pendingSessionCloses(): PendingSessionClose[] {
+  return JSON.parse(localStorage.getItem("faculty.pendingSessionCloses") ?? "[]") as PendingSessionClose[];
+}
+
+export async function reconcileOfflineSessions(): Promise<FacultySession | null> {
+  let active = cachedActiveSession();
+  if (active?.offline_pending_activation) {
+    active = await startSession(active.course_offering_id);
+  }
+  const pending = pendingSessionCloses();
+  const remaining: PendingSessionClose[] = [];
+  for (const item of pending) {
+    try {
+      const activated = await startSession(item.courseOfferingId);
+      await closeSession(activated.id);
+    } catch {
+      remaining.push(item);
+    }
+  }
+  localStorage.setItem("faculty.pendingSessionCloses", JSON.stringify(remaining));
+  return active;
+}
+
 export function cachedActiveSession(): FacultySession | null {
   const raw = localStorage.getItem("faculty.activeSession");
   return raw ? (JSON.parse(raw) as FacultySession) : null;
@@ -282,7 +348,13 @@ export async function fetchRoster(sessionId: string): Promise<RosterStudent[]> {
   if (!response.ok) {
     throw new Error(`Roster request failed with ${response.status}`);
   }
-  return (await response.json()) as RosterStudent[];
+  const roster = (await response.json()) as RosterStudent[];
+  localStorage.setItem(`faculty.roster.${sessionId}`, JSON.stringify(roster));
+  return roster;
+}
+
+export function cachedRoster(sessionId: string): RosterStudent[] {
+  return JSON.parse(localStorage.getItem(`faculty.roster.${sessionId}`) ?? "[]") as RosterStudent[];
 }
 
 export async function attest(sessionId: string, studentId: string, reason: string): Promise<void> {

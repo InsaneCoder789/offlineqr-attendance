@@ -9,6 +9,7 @@ import {
   cachedFacultyRegister,
   cachedSessionHistory,
   cachedTodayClasses,
+  cachedRoster,
   clearCachedActiveSession,
   clearFacultyIdentity,
   closeSession,
@@ -22,7 +23,11 @@ import {
   facultySessionEventUrl,
   loginFaculty,
   logoutFaculty,
+  prepareOfflineSessions,
+  queueOfflineSessionClose,
+  reconcileOfflineSessions,
   startSession,
+  startCachedOfflineSession,
   changeFacultyPassword,
   updateFacultyProfile,
   type FacultyClass,
@@ -141,6 +146,9 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
       setFacultyCourses(courses);
       setSessionHistory(history);
 
+      const prepared = await prepareOfflineSessions();
+      await Promise.all(prepared.map((item) => fetchRoster(item.id)));
+
       const selected = selectedRegisterOfferingId ?? defaultRegisterOfferingId(courses, today);
       if (selected) {
         setSelectedRegisterOfferingId(selected);
@@ -258,11 +266,24 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     setLoading(true);
     setError(null);
     try {
-      const nextSession = await startSession(courseOfferingId);
+      const nextSession = navigator.onLine
+        ? await startSession(courseOfferingId)
+        : startCachedOfflineSession(courseOfferingId);
       setSession(nextSession);
-      setRoster(await fetchRoster(nextSession.id));
+      setRoster(navigator.onLine ? await fetchRoster(nextSession.id) : cachedRoster(nextSession.id));
       return true;
     } catch (exception) {
+      if (navigator.onLine) {
+        try {
+          const offlineSession = startCachedOfflineSession(courseOfferingId);
+          setSession(offlineSession);
+          setRoster(cachedRoster(offlineSession.id));
+          setOnline(false);
+          return true;
+        } catch {
+          // Surface the original server error when no prepared session exists.
+        }
+      }
       setError(exception instanceof Error ? exception.message : "Session unavailable");
       return false;
     } finally {
@@ -275,8 +296,12 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     setLoading(true);
     setError(null);
     try {
-      await closeSession(session.id);
-      setSessionHistory(await fetchSessionHistory());
+      if (!navigator.onLine || session.offline_pending_activation) {
+        queueOfflineSessionClose(session);
+      } else {
+        await closeSession(session.id);
+        setSessionHistory(await fetchSessionHistory());
+      }
       setSession(null);
       setRoster([]);
       setProjectorMode(false);
@@ -337,7 +362,23 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     setOnline(navigator.onLine);
-    const setOnlineState = () => setOnline(navigator.onLine);
+    const setOnlineState = () => {
+      setOnline(navigator.onLine);
+      if (navigator.onLine && cachedFacultyIdentity()) {
+        void (async () => {
+          try {
+            const reconciled = await reconcileOfflineSessions();
+            if (reconciled) {
+              setSession(reconciled);
+              setRoster(await fetchRoster(reconciled.id));
+            }
+            await refresh();
+          } catch {
+            // The next online event or manual sync retries queued operations.
+          }
+        })();
+      }
+    };
     window.addEventListener("online", setOnlineState);
     window.addEventListener("offline", setOnlineState);
 
@@ -353,6 +394,7 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     setSessionHistory(cachedSessionHistory());
     const active = cachedActiveSession();
     setSession(active);
+    if (active) setRoster(cachedRoster(active.id));
     const selected = defaultRegisterOfferingId(courses, cachedTodayClasses());
     setSelectedRegisterOfferingId(selected);
     setRegister(cachedFacultyRegister(selected));
