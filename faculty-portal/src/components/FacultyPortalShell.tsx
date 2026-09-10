@@ -64,7 +64,7 @@ export function FacultyPortalShell({ children }: { children: React.ReactNode }) 
 
   return (
     <SidebarProvider defaultOpen>
-      <Sidebar collapsible="icon" className="border-r border-r-primary/15">
+      <Sidebar collapsible="icon" className="border-r border-r-sidebar-border">
         <SidebarHeader className="p-3">
           <Link className="flex h-14 items-center gap-3 overflow-hidden rounded-lg px-2" href="/dashboard">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-white">
@@ -129,7 +129,7 @@ export function FacultyPortalShell({ children }: { children: React.ReactNode }) 
       </Sidebar>
 
       <SidebarInset className="min-w-0 bg-background">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-b-primary/15 bg-card/95 px-4 backdrop-blur md:px-6">
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b-2 border-b-border bg-card/95 px-4 backdrop-blur md:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <SidebarTrigger />
             <div className="min-w-0">

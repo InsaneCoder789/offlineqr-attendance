@@ -18,7 +18,7 @@ export function CourseGrid({ showActions = false }: { showActions?: boolean }) {
   return (
     <div className="grid gap-4 p-5 md:grid-cols-2 2xl:grid-cols-3">
       {facultyCourses.map((course, index) => (
-        <Card key={`${course.course_offering_id}:${course.section_code}:${index}`} className="border-t-2 border-t-primary/35 transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-34px_oklch(0.28_0.08_145)]">
+        <Card key={`${course.course_offering_id}:${course.section_code}:${index}`} className="transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-34px_oklch(0.28_0.08_145)]">
           <CardHeader>
             <CardTitle className="pr-16">{course.course_name}</CardTitle>
             <CardDescription>{course.course_code} · Section {course.section_code}</CardDescription>

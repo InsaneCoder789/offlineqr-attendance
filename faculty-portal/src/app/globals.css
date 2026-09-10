@@ -48,7 +48,7 @@
 }
 
 :root {
-    --background: oklch(0.962 0.018 151);
+    --background: oklch(0.975 0.005 151);
     --foreground: oklch(0.205 0.018 154);
     --card: oklch(0.997 0.002 151);
     --card-foreground: oklch(0.205 0.018 154);
@@ -56,15 +56,15 @@
     --popover-foreground: oklch(0.205 0.018 154);
     --primary: oklch(0.53 0.145 145);
     --primary-foreground: oklch(0.99 0.004 145);
-    --secondary: oklch(0.928 0.026 151);
+    --secondary: oklch(0.95 0.01 151);
     --secondary-foreground: oklch(0.26 0.026 151);
-    --muted: oklch(0.938 0.018 151);
+    --muted: oklch(0.955 0.006 151);
     --muted-foreground: oklch(0.5 0.018 151);
-    --accent: oklch(0.905 0.052 147);
+    --accent: oklch(0.94 0.025 147);
     --accent-foreground: oklch(0.37 0.085 145);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.86 0.025 151);
-    --input: oklch(0.84 0.028 151);
+    --border: oklch(0.79 0.012 151);
+    --input: oklch(0.76 0.014 151);
     --ring: oklch(0.53 0.145 145);
     --chart-1: oklch(0.53 0.145 145);
     --chart-2: oklch(0.66 0.105 147);
@@ -72,13 +72,13 @@
     --chart-4: oklch(0.72 0.08 95);
     --chart-5: oklch(0.57 0.11 34);
     --radius: 0.5rem;
-    --sidebar: oklch(0.945 0.027 151);
+    --sidebar: oklch(0.985 0.004 151);
     --sidebar-foreground: oklch(0.24 0.023 151);
     --sidebar-primary: oklch(0.53 0.145 145);
     --sidebar-primary-foreground: oklch(0.99 0.004 145);
-    --sidebar-accent: oklch(0.875 0.065 148);
+    --sidebar-accent: oklch(0.925 0.036 148);
     --sidebar-accent-foreground: oklch(0.36 0.082 145);
-    --sidebar-border: oklch(0.83 0.037 151);
+    --sidebar-border: oklch(0.8 0.014 151);
     --sidebar-ring: oklch(0.53 0.145 145);
 }
 
@@ -152,12 +152,12 @@
   }
 
   .portal-workspace [data-slot="card"] {
-    box-shadow: 0 14px 40px -34px color-mix(in oklab, var(--primary) 52%, transparent);
-    ring-color: color-mix(in oklab, var(--primary) 18%, transparent);
+    border-color: var(--border);
+    box-shadow: 0 12px 30px -28px color-mix(in oklab, var(--foreground) 42%, transparent);
   }
 
   .portal-workspace [data-slot="table-header"] {
-    background: color-mix(in oklab, var(--accent) 52%, white);
+    background: color-mix(in oklab, var(--muted) 76%, white);
   }
 }
 
