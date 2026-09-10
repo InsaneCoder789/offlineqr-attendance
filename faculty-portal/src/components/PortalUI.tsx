@@ -41,7 +41,7 @@ export function PageIntro({
   actions?: React.ReactNode;
 }) {
   return (
-    <header className="grid gap-5 border-b pb-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+    <header className="grid gap-5 border-b border-l-4 border-b-primary/20 border-l-primary bg-accent/45 px-5 py-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
       <div className="min-w-0">
         {eyebrow ? <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary">{eyebrow}</p> : null}
         <h2 className="text-balance text-3xl font-semibold leading-tight tracking-tight md:text-4xl">{title}</h2>
@@ -62,7 +62,7 @@ export function SectionHeading({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 border-b px-5 pb-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="flex flex-col gap-3 border-b border-b-primary/15 px-5 pb-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
         {description ? <p className="mt-1 text-sm leading-5 text-muted-foreground">{description}</p> : null}
@@ -82,9 +82,9 @@ export function MetricStrip({
   return (
     <section className={cn("grid overflow-hidden rounded-lg border bg-card shadow-[0_12px_36px_-30px_oklch(0.28_0.08_145)] sm:grid-cols-2 xl:grid-cols-4", className)}>
       {metrics.map(({ label, value, icon: Icon, detail }, index) => (
-        <article className={cn("min-w-0 px-5 py-4", index > 0 && "border-t sm:border-t-0 sm:border-l", index === 2 && "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0")} key={label}>
+        <article className={cn("min-w-0 border-t-2 border-t-primary/45 bg-card px-5 py-4 first:bg-accent/45", index > 0 && "sm:border-l", index === 2 && "sm:border-l-0 xl:border-l")} key={label}>
           <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            <Icon className="size-4 text-primary" aria-hidden="true" />
+            <span className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary"><Icon className="size-4" aria-hidden="true" /></span>
             <span>{label}</span>
           </div>
           <strong className="mt-2 block text-2xl font-semibold tracking-tight">{value}</strong>

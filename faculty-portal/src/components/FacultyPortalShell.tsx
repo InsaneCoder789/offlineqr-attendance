@@ -64,7 +64,7 @@ export function FacultyPortalShell({ children }: { children: React.ReactNode }) 
 
   return (
     <SidebarProvider defaultOpen>
-      <Sidebar collapsible="icon" className="border-r">
+      <Sidebar collapsible="icon" className="border-r border-r-primary/15">
         <SidebarHeader className="p-3">
           <Link className="flex h-14 items-center gap-3 overflow-hidden rounded-lg px-2" href="/dashboard">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-white">
@@ -129,7 +129,7 @@ export function FacultyPortalShell({ children }: { children: React.ReactNode }) 
       </Sidebar>
 
       <SidebarInset className="min-w-0 bg-background">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b bg-background/95 px-4 backdrop-blur md:px-6">
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-b-primary/15 bg-card/95 px-4 backdrop-blur md:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <SidebarTrigger />
             <div className="min-w-0">
@@ -149,7 +149,7 @@ export function FacultyPortalShell({ children }: { children: React.ReactNode }) 
           </div>
         </header>
 
-        <main className="mx-auto flex w-full max-w-[1480px] flex-col gap-6 p-4 md:p-6 xl:p-8">
+        <main className="portal-workspace mx-auto flex w-full max-w-[1480px] flex-col gap-6 p-4 md:p-6 xl:p-8">
           {error ? (
             <Alert variant="destructive">
               <TriangleAlert />

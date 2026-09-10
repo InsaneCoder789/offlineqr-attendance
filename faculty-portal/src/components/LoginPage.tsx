@@ -47,7 +47,7 @@ export function LoginPage() {
   return (
     <main className="relative isolate min-h-[100dvh] overflow-hidden bg-[#10251b] lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(30rem,0.85fr)]">
       <Image
-        src="/branding/kiit-campus-aerial.jpg"
+        src="/branding/kiit-campus-aerial.webp"
         alt="Aerial view of the KIIT campus"
         fill
         priority

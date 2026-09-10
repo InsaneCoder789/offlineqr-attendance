@@ -18,12 +18,12 @@ export function ClassList({ items }: { items: FacultyClass[] }) {
 
   return (
     <div className="divide-y">
-      {items.map((item) => {
+      {items.map((item, index) => {
         const tone = stateClass(item, session);
         const isOtherSessionActive = Boolean(session && !session.closed_at && session.course_offering_id !== item.course_offering_id);
         const isThisSessionActive = Boolean(session && !session.closed_at && session.course_offering_id === item.course_offering_id);
         return (
-          <article className="grid min-w-0 gap-4 px-5 py-4 transition-colors hover:bg-muted/35 md:grid-cols-[8.5rem_minmax(0,1fr)_auto_auto] md:items-center" key={item.course_offering_id}>
+          <article className="grid min-w-0 gap-4 px-5 py-4 transition-colors hover:bg-accent/35 md:grid-cols-[8.5rem_minmax(0,1fr)_auto_auto] md:items-center" key={`${item.course_offering_id}:${item.start_time}:${item.end_time}:${index}`}>
             <time className="flex items-center gap-2 text-sm font-semibold"><Clock3 className="size-4 text-primary" />{formatTime(item.start_time)} - {formatTime(item.end_time)}</time>
             <div className="min-w-0">
               <strong className="block truncate text-sm font-semibold">{item.course_name}</strong>
