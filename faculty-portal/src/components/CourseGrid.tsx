@@ -1,56 +1,51 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { ArrowRight, BookOpen, ClipboardList, GraduationCap, Play } from "lucide-react";
 import { useFacultyPortal } from "./FacultyPortalProvider";
-import { Icon } from "./Icons";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyPanel } from "./PortalUI";
 
 export function CourseGrid({ showActions = false }: { showActions?: boolean }) {
   const router = useRouter();
   const { facultyCourses, refreshRegister, start } = useFacultyPortal();
 
   if (facultyCourses.length === 0) {
-    return (
-      <div className="empty compact">
-        <Icon name="classes" />
-        <h3>No assigned courses synced</h3>
-        <p>Sync to load your teaching assignments.</p>
-      </div>
-    );
+    return <EmptyPanel icon={BookOpen} title="No assigned courses" description="Course assignments will appear after the next successful synchronization." className="m-5" />;
   }
 
   return (
-    <div className="course-grid">
+    <div className="grid gap-4 p-5 md:grid-cols-2 2xl:grid-cols-3">
       {facultyCourses.map((course) => (
-        <article className="course-card" key={course.course_offering_id}>
-          <div>
-            <span>{course.course_code} | {course.section_code}</span>
-            <strong>{course.course_name}</strong>
-          </div>
-          <p>{course.schedule_summary}</p>
-          <footer>
-            <small>{course.student_count} students</small>
+        <Card key={course.course_offering_id} className="transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-34px_oklch(0.28_0.08_145)]">
+          <CardHeader>
+            <CardTitle className="pr-16">{course.course_name}</CardTitle>
+            <CardDescription>{course.course_code} · Section {course.section_code}</CardDescription>
+            <CardAction><span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><GraduationCap className="size-4" /></span></CardAction>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm leading-6 text-muted-foreground">{course.schedule_summary}</p>
+          </CardContent>
+          <CardFooter className="justify-between gap-3">
+            <span className="text-xs font-medium text-muted-foreground">{course.student_count} students</span>
             {showActions ? (
-              <div className="course-actions">
-                <button
-                  className="secondary"
-                  onClick={() => {
-                    router.push("/records");
-                    void refreshRegister(course.course_offering_id);
-                  }}
-                >
-                  <Icon name="records" />
-                  Register
-                </button>
-                <button onClick={async () => {
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => {
+                  router.push("/records");
+                  void refreshRegister(course.course_offering_id);
+                }}>
+                  <ClipboardList data-icon="inline-start" />Register
+                </Button>
+                <Button size="sm" onClick={async () => {
                   if (await start(course.course_offering_id)) router.push("/attendance");
                 }}>
-                  <Icon name="play" />
-                  Start
-                </button>
+                  <Play data-icon="inline-start" />Start
+                </Button>
               </div>
-            ) : null}
-          </footer>
-        </article>
+            ) : <Button variant="ghost" size="sm" onClick={() => router.push("/classes")}>View course<ArrowRight data-icon="inline-end" /></Button>}
+          </CardFooter>
+        </Card>
       ))}
     </div>
   );

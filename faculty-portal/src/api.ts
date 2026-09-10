@@ -21,6 +21,7 @@ export type FacultyIdentity = {
   phone_number: string | null;
   designation: string | null;
   org_unit: string | null;
+  access_role?: "FACULTY" | "ICT_ADMIN";
   must_change_password: boolean;
   password_changed_at: string | null;
   last_login_at: string | null;

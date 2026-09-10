@@ -1,9 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { facultyInitials } from "../lib/format";
+import { KeyRound, LogOut, RefreshCw, Save, ShieldCheck, UserRound, Wifi, WifiOff } from "lucide-react";
+import { toast } from "sonner";
+import { facultyInitials } from "@/lib/format";
 import { useFacultyPortal } from "./FacultyPortalProvider";
-import { Icon } from "./Icons";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { PageIntro, StatusBadge } from "./PortalUI";
 
 export function SettingsPage() {
   const { classes, facultyIdentity, online, switchFaculty, updateProfile, changePassword, loading } = useFacultyPortal();
@@ -11,7 +17,6 @@ export function SettingsPage() {
   const [phoneNumber, setPhoneNumber] = useState(facultyIdentity?.phone_number ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setDisplayName(facultyIdentity?.display_name ?? "");
@@ -20,94 +25,92 @@ export function SettingsPage() {
 
   async function submitProfile(event: React.FormEvent) {
     event.preventDefault();
-    await updateProfile(displayName, phoneNumber || null);
-    setMessage("Profile updated.");
+    try {
+      await updateProfile(displayName, phoneNumber || null);
+      toast.success("Faculty profile updated");
+    } catch { /* Provider exposes the service error in the shell. */ }
   }
 
   async function submitPassword(event: React.FormEvent) {
     event.preventDefault();
-    await changePassword(currentPassword, newPassword);
-    setCurrentPassword("");
-    setNewPassword("");
-    setMessage("Password updated.");
+    try {
+      await changePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      toast.success("Password updated. Sign in again to continue.");
+    } catch { /* Provider exposes the service error in the shell. */ }
   }
 
+  const facts = [
+    ["Faculty ID", facultyIdentity?.employee_code ?? facultyIdentity?.id ?? "Unavailable"],
+    ["Designation", facultyIdentity?.designation ?? "Pending verification"],
+    ["Organizational unit", facultyIdentity?.org_unit ?? "Not assigned"],
+    ["Offline readiness", `${classes.filter((course) => course.offline_ready).length} of ${classes.length} classes`],
+  ];
+
   return (
-    <section className="panel settings">
-      <div className="section-head">
-        <div>
-          <h2>Faculty Profile</h2>
-          <p>Account details and portal status.</p>
+    <>
+      <PageIntro
+        eyebrow="Account controls"
+        title="Profile and security"
+        description="Manage faculty contact information, password security, and this browser session."
+        actions={<StatusBadge tone={online ? "success" : "warning"} icon={online ? Wifi : WifiOff}>{online ? "Connected" : "Offline mode"}</StatusBadge>}
+      />
+
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
+        <Card className="self-start">
+          <CardHeader>
+            <div className="mb-3 flex size-12 items-center justify-center rounded-lg bg-primary/10 text-lg font-semibold text-primary">{facultyInitials(facultyIdentity)}</div>
+            <CardTitle>{facultyIdentity?.display_name ?? "Faculty"}</CardTitle>
+            <CardDescription>{facultyIdentity?.institutional_email}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-0">
+            {facts.map(([label, value]) => (
+              <div className="grid gap-1 border-t py-3 first:border-t-0 sm:grid-cols-[9rem_minmax(0,1fr)]" key={label}>
+                <span className="text-xs text-muted-foreground">{label}</span>
+                <strong className="break-words text-sm font-medium">{value}</strong>
+              </div>
+            ))}
+            <div className="mt-4 border-t pt-4">
+              <Button variant="outline" className="w-full" onClick={() => void switchFaculty()}><LogOut data-icon="inline-start" />Sign out of portal</Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-5">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><UserRound className="size-4 text-primary" />Profile details</CardTitle>
+              <CardDescription>Keep your faculty directory information current.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={(event) => void submitProfile(event)}>
+                <FieldGroup>
+                  <Field><FieldLabel htmlFor="display-name">Display name</FieldLabel><Input id="display-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} autoComplete="name" required /></Field>
+                  <Field><FieldLabel htmlFor="phone-number">Phone number</FieldLabel><Input id="phone-number" value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} autoComplete="tel" inputMode="tel" placeholder="Optional institutional contact" /></Field>
+                  <Button disabled={loading} type="submit" className="w-fit">{loading ? <RefreshCw data-icon="inline-start" className="animate-spin" /> : <Save data-icon="inline-start" />}Save profile</Button>
+                </FieldGroup>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><KeyRound className="size-4 text-primary" />Change password</CardTitle>
+              <CardDescription>Use a unique password of at least 14 characters.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={(event) => void submitPassword(event)}>
+                <FieldGroup>
+                  <Field><FieldLabel htmlFor="current-password">Current password</FieldLabel><Input id="current-password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" required /></Field>
+                  <Field><FieldLabel htmlFor="new-password">New password</FieldLabel><Input id="new-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" minLength={14} required /><FieldDescription>Changing your password ends the current faculty session on this browser.</FieldDescription></Field>
+                  <Button disabled={loading} type="submit" className="w-fit">{loading ? <RefreshCw data-icon="inline-start" className="animate-spin" /> : <ShieldCheck data-icon="inline-start" />}Update password</Button>
+                </FieldGroup>
+              </form>
+            </CardContent>
+          </Card>
         </div>
-      </div>
-      <div className="setting-row">
-        <span>Account</span>
-        <strong>{facultyIdentity?.display_name ?? "Faculty"}</strong>
-      </div>
-      <div className="setting-row">
-        <span>Faculty ID</span>
-        <strong>{facultyIdentity?.employee_code ?? facultyIdentity?.id ?? "Unavailable"}</strong>
-      </div>
-      <div className="setting-row">
-        <span>Faculty initials</span>
-        <strong>{facultyInitials(facultyIdentity)}</strong>
-      </div>
-      <div className="setting-row">
-        <span>Role</span>
-        <strong>{facultyIdentity?.designation ?? "Role pending verification"}</strong>
-      </div>
-      <div className="setting-row">
-        <span>Organizational unit</span>
-        <strong>{facultyIdentity?.org_unit ?? "Not assigned"}</strong>
-      </div>
-      <div className="setting-row">
-        <span>Synchronization</span>
-        <strong className="inline-status">
-          <Icon name={online ? "wifiOn" : "wifiOff"} />
-          {online ? "Online" : "Offline Mode"}
-        </strong>
-      </div>
-      <div className="setting-row">
-        <span>Offline-ready classes</span>
-        <strong>{classes.filter((course) => course.offline_ready).length} of {classes.length} ready</strong>
-      </div>
-      <div className="setting-row">
-        <span>Portal type</span>
-        <strong>Secure faculty console</strong>
-      </div>
-      <div className="setting-row">
-        <span>Attendance mode</span>
-        <strong>Dynamic QR with manual attestation</strong>
-      </div>
-      <form className="profile-form" onSubmit={(event) => void submitProfile(event)}>
-        <h3>Profile details</h3>
-        <label className="login-field">
-          <span>Display name</span>
-          <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} autoComplete="name" required />
-        </label>
-        <label className="login-field">
-          <span>Phone number</span>
-          <input value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} autoComplete="tel" inputMode="tel" />
-        </label>
-        <button disabled={loading} type="submit"><Icon name="check" />Save profile</button>
-      </form>
-      <form className="profile-form" onSubmit={(event) => void submitPassword(event)}>
-        <h3>Change password</h3>
-        <label className="login-field">
-          <span>Current password</span>
-          <input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" required />
-        </label>
-        <label className="login-field">
-          <span>New password</span>
-          <input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" minLength={14} required />
-        </label>
-        <button disabled={loading} type="submit"><Icon name="check" />Update password</button>
-      </form>
-      {message ? <p className="notice success">{message}</p> : null}
-      <button className="secondary" onClick={() => void switchFaculty()}>
-        <Icon name="settings" />
-        Sign out of this portal
-      </button>
-    </section>
+      </section>
+    </>
   );
 }

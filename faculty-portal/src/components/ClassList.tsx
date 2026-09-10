@@ -1,51 +1,53 @@
 "use client";
 
-import type { FacultyClass } from "../api";
+import type { FacultyClass } from "@/api";
 import { useRouter } from "next/navigation";
-import { formatTime, stateClass, stateLabel } from "../lib/format";
+import { CalendarX2, Clock3, DoorOpen, Play, Radio } from "lucide-react";
+import { formatTime, stateClass, stateLabel } from "@/lib/format";
 import { useFacultyPortal } from "./FacultyPortalProvider";
-import { Icon } from "./Icons";
+import { Button } from "@/components/ui/button";
+import { EmptyPanel, StatusBadge } from "./PortalUI";
 
 export function ClassList({ items }: { items: FacultyClass[] }) {
   const router = useRouter();
   const { session, start } = useFacultyPortal();
 
   if (items.length === 0) {
-    return (
-      <div className="empty compact">
-        <Icon name="classes" />
-        <h3>No classes scheduled for today</h3>
-        <p>Sync to load your timetable from the server.</p>
-      </div>
-    );
+    return <EmptyPanel icon={CalendarX2} title="No classes scheduled today" description="Your synchronized teaching timetable will appear here." className="m-5" />;
   }
 
   return (
-    <div className="class-list">
-      {items.map((item) => (
-        <article className="class-row" key={item.course_offering_id}>
-          <time>{formatTime(item.start_time)} - {formatTime(item.end_time)}</time>
-          <div className="class-row-details">
-            <strong>{item.course_name}</strong>
-            <p className="class-meta">
-              <span className="class-room"><Icon name="room" />Room {item.room}</span>
-              <span className="class-separator">|</span>
-              <span className="class-code">{item.course_code} | {item.section_code}</span>
-            </p>
-          </div>
-          <span className={`status ${stateClass(item, session)}`}>{stateLabel(item, session)}</span>
-          <button
-            disabled={Boolean(session && !session.closed_at && session.course_offering_id !== item.course_offering_id)}
-            title={session && !session.closed_at && session.course_offering_id !== item.course_offering_id ? "Close the active session first" : undefined}
-            onClick={async () => {
-              if (await start(item.course_offering_id)) router.push("/attendance");
-            }}
-          >
-            <Icon name="play" />
-            Start Attendance
-          </button>
-        </article>
-      ))}
+    <div className="divide-y">
+      {items.map((item) => {
+        const tone = stateClass(item, session);
+        const isOtherSessionActive = Boolean(session && !session.closed_at && session.course_offering_id !== item.course_offering_id);
+        const isThisSessionActive = Boolean(session && !session.closed_at && session.course_offering_id === item.course_offering_id);
+        return (
+          <article className="grid min-w-0 gap-4 px-5 py-4 transition-colors hover:bg-muted/35 md:grid-cols-[8.5rem_minmax(0,1fr)_auto_auto] md:items-center" key={item.course_offering_id}>
+            <time className="flex items-center gap-2 text-sm font-semibold"><Clock3 className="size-4 text-primary" />{formatTime(item.start_time)} - {formatTime(item.end_time)}</time>
+            <div className="min-w-0">
+              <strong className="block truncate text-sm font-semibold">{item.course_name}</strong>
+              <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span>{item.course_code} · {item.section_code}</span>
+                <span className="flex items-center gap-1"><DoorOpen className="size-3.5" />Room {item.room}</span>
+              </p>
+            </div>
+            <StatusBadge tone={tone === "success" ? "success" : tone === "warning" ? "warning" : "neutral"} icon={isThisSessionActive ? Radio : undefined}>{stateLabel(item, session)}</StatusBadge>
+            <Button
+              size="sm"
+              variant={isThisSessionActive ? "outline" : "default"}
+              disabled={isOtherSessionActive}
+              title={isOtherSessionActive ? "Close the active session first" : undefined}
+              onClick={async () => {
+                if (isThisSessionActive || await start(item.course_offering_id)) router.push("/attendance");
+              }}
+            >
+              {isThisSessionActive ? <Radio data-icon="inline-start" /> : <Play data-icon="inline-start" />}
+              {isThisSessionActive ? "Open live" : "Start"}
+            </Button>
+          </article>
+        );
+      })}
     </div>
   );
 }

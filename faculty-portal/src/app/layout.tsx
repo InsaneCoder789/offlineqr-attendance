@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
-import "../styles.css";
+import "./globals.css";
 import { FacultyPortalProvider } from "../components/FacultyPortalProvider";
 import { FacultyPortalShell } from "../components/FacultyPortalShell";
 import { OfflineRuntime } from "../components/OfflineRuntime";
+import { GeistSans } from "geist/font/sans";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: "KIIT Faculty Attendance Portal",
@@ -15,12 +18,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={GeistSans.variable}>
       <body>
         <OfflineRuntime />
-        <FacultyPortalProvider>
-          <FacultyPortalShell>{children}</FacultyPortalShell>
-        </FacultyPortalProvider>
+        <TooltipProvider>
+          <FacultyPortalProvider>
+            <FacultyPortalShell>{children}</FacultyPortalShell>
+          </FacultyPortalProvider>
+          <Toaster position="top-right" richColors />
+        </TooltipProvider>
       </body>
     </html>
   );

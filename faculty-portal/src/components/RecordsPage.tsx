@@ -1,8 +1,14 @@
 "use client";
 
-import { dateLabel, titleCase } from "../lib/format";
+import { AlertTriangle, CalendarRange, Download, RefreshCw, Search, Users } from "lucide-react";
+import { dateLabel, titleCase } from "@/lib/format";
 import { useFacultyPortal } from "./FacultyPortalProvider";
-import { Icon } from "./Icons";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EmptyPanel, MetricStrip, PageIntro, SectionHeading, StatusBadge } from "./PortalUI";
 
 export function RecordsPage() {
   const {
@@ -18,109 +24,47 @@ export function RecordsPage() {
     setRegisterQuery,
   } = useFacultyPortal();
 
-  const selected =
-    selectedRegisterOfferingId ??
-    facultyCourses.find((item) => item.section_code === "CS21")?.course_offering_id ??
-    facultyCourses[0]?.course_offering_id ??
-    "";
+  const selected = selectedRegisterOfferingId ?? facultyCourses.find((item) => item.section_code === "CS21")?.course_offering_id ?? facultyCourses[0]?.course_offering_id ?? "";
   const visibleRegister = selected === register?.course_offering_id ? register : null;
-  const belowThreshold = visibleRegister
-    ? visibleRegister.students.filter((student) => student.present + student.absent > 0 && student.percentage < 75)
-    : [];
-  const records = sessionHistory.slice(0, 12);
+  const belowThreshold = visibleRegister ? visibleRegister.students.filter((student) => student.present + student.absent > 0 && student.percentage < 75) : [];
 
   return (
     <>
-      <section className="records-hero">
-        <div>
-          <p className="eyeline">Teaching records</p>
-          <h2>{visibleRegister ? `${visibleRegister.course_code} | ${visibleRegister.section_code}` : "Course Register"}</h2>
-          <p>{visibleRegister ? visibleRegister.course_name : "Select a course to inspect its academic attendance register."}</p>
-        </div>
-        <div className="records-summary">
-          <span><strong>{visibleRegister?.students.length ?? 0}</strong> Students</span>
-          <span><strong>{visibleRegister?.sessions.length ?? 0}</strong> Closed Sessions</span>
-          <span><strong>{belowThreshold.length}</strong> Below 75%</span>
-        </div>
-      </section>
-      <div className="filters">
-        <select aria-label="Select course register" value={selected} onChange={(event) => {
-          setRegisterDateFilter("all");
-          if (event.target.value) void refreshRegister(event.target.value);
-        }}>
-          {facultyCourses.map((course) => (
-            <option key={course.course_offering_id} value={course.course_offering_id}>
-              {course.course_code} | {course.section_code}
-            </option>
-          ))}
-        </select>
-        <button className="secondary" disabled={!selected} onClick={() => selected && void refreshRegister(selected)}>
-          <Icon name="refresh" />
-          Load Register
-        </button>
-        <input
-          type="search"
-          value={registerQuery}
-          placeholder="Search roll number or name"
-          aria-label="Search register"
-          onChange={(event) => setRegisterQuery(event.target.value)}
-        />
-        <select
-          aria-label="Filter register by session date"
-          disabled={!visibleRegister?.sessions.length}
-          value={registerDateFilter}
-          onChange={(event) => setRegisterDateFilter(event.target.value)}
-        >
-          <option value="all">All sessions</option>
-          {(visibleRegister?.sessions ?? []).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-        </select>
-        <button className="secondary" disabled={!visibleRegister} onClick={exportRegisterCsv}>
-          <Icon name="records" />
-          Export CSV
-        </button>
-      </div>
-      {visibleRegister ? <RegisterPanel /> : (
-        <section className="panel">
-          <div className="empty compact">
-            <Icon name="records" />
-            <h3>No register loaded</h3>
-            <p>Select a course and sync to load the attendance register.</p>
+      <PageIntro
+        eyebrow="Academic records"
+        title={visibleRegister ? `${visibleRegister.course_code} · ${visibleRegister.section_code} register` : "Attendance records"}
+        description={visibleRegister ? visibleRegister.course_name : "Select an assigned course to inspect its authoritative attendance register."}
+        actions={<Button variant="outline" disabled={!visibleRegister} onClick={exportRegisterCsv}><Download data-icon="inline-start" />Export CSV</Button>}
+      />
+
+      <MetricStrip className="xl:grid-cols-3" metrics={[
+        { label: "Enrolled students", value: visibleRegister?.students.length ?? 0, icon: Users, detail: visibleRegister?.section_code ?? "No register selected" },
+        { label: "Closed sessions", value: visibleRegister?.sessions.length ?? 0, icon: CalendarRange, detail: "Included in this register" },
+        { label: "Below 75%", value: belowThreshold.length, icon: AlertTriangle, detail: "Requires faculty review" },
+      ]} />
+
+      <Card>
+        <SectionHeading title="Register filters" description="Choose a course, narrow the roster, and inspect a specific session." />
+        <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-[minmax(13rem,0.8fr)_minmax(15rem,1fr)_minmax(12rem,0.7fr)_auto]">
+          <Select value={selected} onValueChange={(value) => { setRegisterDateFilter("all"); if (value) void refreshRegister(value); }}>
+            <SelectTrigger className="h-10 w-full" aria-label="Select course register"><SelectValue placeholder="Select course" /></SelectTrigger>
+            <SelectContent><SelectGroup>{facultyCourses.map((course) => <SelectItem key={course.course_offering_id} value={course.course_offering_id}>{course.course_code} · {course.section_code}</SelectItem>)}</SelectGroup></SelectContent>
+          </Select>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input type="search" value={registerQuery} placeholder="Search roll number or name" className="pl-9" onChange={(event) => setRegisterQuery(event.target.value)} />
           </div>
-        </section>
-      )}
+          <Select value={registerDateFilter} disabled={!visibleRegister?.sessions.length} onValueChange={(value) => value && setRegisterDateFilter(value)}>
+            <SelectTrigger className="h-10 w-full" aria-label="Filter by session"><SelectValue placeholder="All sessions" /></SelectTrigger>
+            <SelectContent><SelectGroup><SelectItem value="all">All sessions</SelectItem>{(visibleRegister?.sessions ?? []).map((item) => <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}</SelectGroup></SelectContent>
+          </Select>
+          <Button variant="outline" disabled={!selected} onClick={() => selected && void refreshRegister(selected)}><RefreshCw data-icon="inline-start" />Refresh</Button>
+        </div>
+      </Card>
+
+      {visibleRegister ? <RegisterPanel /> : <Card><EmptyPanel icon={CalendarRange} title="No register loaded" description="Select an assigned course to load its synchronized attendance records." className="m-5" /></Card>}
       {visibleRegister ? <BelowThresholdPanel /> : null}
-      <section className="panel">
-        <div className="section-head">
-          <div>
-            <h2>Session Ledger</h2>
-            <p>Recent sessions from courses assigned to this faculty account.</p>
-          </div>
-        </div>
-        {records.length === 0 ? (
-          <div className="empty compact">
-            <Icon name="records" />
-            <h3>No records available yet</h3>
-            <p>Completed sessions will appear here after syncing.</p>
-          </div>
-        ) : (
-          <div className="roster-table">
-            <div className="table-head">
-              <span>Date</span>
-              <span>Course</span>
-              <span>Status</span>
-              <span>Present</span>
-            </div>
-            {records.map((row) => (
-              <div className="table-row" key={row.id}>
-                <span>{dateLabel(new Date(row.scheduled_start))}</span>
-                <strong>{row.course_code} | {row.section_code}</strong>
-                <span className={`status ${row.state === "ACTIVE" ? "success" : "neutral"}`}>{titleCase(row.state)}</span>
-                <span>{row.present} / {row.expected}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <SessionLedger />
     </>
   );
 }
@@ -129,109 +73,72 @@ function RegisterPanel() {
   const { register, registerDateFilter, registerQuery } = useFacultyPortal();
   if (!register) return null;
   const normalizedQuery = registerQuery.trim().toLowerCase();
-  const sessions = registerDateFilter === "all"
-    ? register.sessions
-    : register.sessions.filter((item) => item.id === registerDateFilter);
-  const matchingStudents = register.students.filter((student) =>
-    !normalizedQuery ||
-    student.roll_number.toLowerCase().includes(normalizedQuery) ||
-    student.display_name.toLowerCase().includes(normalizedQuery)
-  );
+  const sessions = registerDateFilter === "all" ? register.sessions : register.sessions.filter((item) => item.id === registerDateFilter);
+  const matchingStudents = register.students.filter((student) => !normalizedQuery || student.roll_number.toLowerCase().includes(normalizedQuery) || student.display_name.toLowerCase().includes(normalizedQuery));
   const shownStudents = matchingStudents.slice(0, 80);
 
   return (
-    <section className="panel">
-      <div className="section-head">
-        <div>
-          <h2>{register.course_code} Attendance Register</h2>
-          <p>{register.course_name} | {register.section_code} | {matchingStudents.length} of {register.students.length} enrolled students</p>
-        </div>
-        <span className="status neutral">{sessions.length} sessions</span>
-      </div>
-      {register.sessions.length === 0 ? (
-        <div className="empty compact">
-          <Icon name="records" />
-          <h3>No sessions conducted</h3>
-          <p>The register will populate after attendance sessions are closed and synchronized.</p>
-        </div>
-      ) : shownStudents.length === 0 ? (
-        <div className="empty compact">
-          <Icon name="records" />
-          <h3>No matching students</h3>
-          <p>Clear the register search or change the session filter.</p>
-        </div>
-      ) : (
+    <Card className="min-w-0">
+      <SectionHeading title={`${register.course_code} attendance register`} description={`${register.course_name} · ${register.section_code} · ${matchingStudents.length} of ${register.students.length} students`} action={<StatusBadge>{sessions.length} sessions</StatusBadge>} />
+      {register.sessions.length === 0 ? <EmptyPanel icon={CalendarRange} title="No sessions conducted" description="The register populates after a session is closed and synchronized." className="m-5" /> : shownStudents.length === 0 ? <EmptyPanel icon={Search} title="No matching students" description="Clear the search or change the session filter." className="m-5" /> : (
         <>
-          <div className="register-scroll" role="region" aria-label={`${register.course_code} ${register.section_code} attendance register`}>
-            <table className="register-table">
-              <thead>
-                <tr>
-                  <th className="sticky-col">Roll / Student</th>
-                  {sessions.map((item) => <th key={item.id} title={`${dateLabel(new Date(item.scheduled_start))} | ${titleCase(item.state)}`}>{item.label}</th>)}
-                  <th>Present</th>
-                  <th>Absent</th>
-                  <th>%</th>
-                </tr>
-              </thead>
-              <tbody>
+          <div className="max-w-full overflow-auto" role="region" aria-label={`${register.course_code} ${register.section_code} attendance register`}>
+            <Table className="min-w-max">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="sticky left-0 min-w-56 bg-card">Roll / student</TableHead>
+                  {sessions.map((item) => <TableHead className="text-center" key={item.id} title={`${dateLabel(new Date(item.scheduled_start))} · ${titleCase(item.state)}`}>{item.label}</TableHead>)}
+                  <TableHead className="text-center">Present</TableHead>
+                  <TableHead className="text-center">Absent</TableHead>
+                  <TableHead className="text-center">Rate</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {shownStudents.map((student) => (
-                  <tr key={student.student_id}>
-                    <td className="sticky-col"><strong>{student.roll_number}</strong><span>{student.display_name}</span></td>
+                  <TableRow key={student.student_id}>
+                    <TableCell className="sticky left-0 bg-card"><strong className="block font-mono text-xs">{student.roll_number}</strong><span className="mt-0.5 block text-xs text-muted-foreground">{student.display_name}</span></TableCell>
                     {sessions.map((item) => <RegisterMark key={item.id} status={student.statuses[item.id]} />)}
-                    <td>{student.present}</td>
-                    <td>{student.absent}</td>
-                    <td><span className={`status ${student.percentage >= 75 ? "success" : "warning"}`}>{student.percentage.toFixed(0)}%</span></td>
-                  </tr>
+                    <TableCell className="text-center">{student.present}</TableCell>
+                    <TableCell className="text-center">{student.absent}</TableCell>
+                    <TableCell className="text-center"><StatusBadge tone={student.percentage >= 75 ? "success" : "warning"}>{student.percentage.toFixed(0)}%</StatusBadge></TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
-          {matchingStudents.length > shownStudents.length ? <p className="table-note">Showing first {shownStudents.length} matching students. Export CSV includes the filtered register view.</p> : null}
+          {matchingStudents.length > shownStudents.length ? <p className="border-t px-5 py-3 text-xs text-muted-foreground">Showing the first {shownStudents.length} matching students. The CSV export includes the complete filtered register.</p> : null}
         </>
       )}
-    </section>
+    </Card>
   );
 }
 
 function RegisterMark({ status }: { status: string | null }) {
-  if (status === "PRESENT") return <td><span className="mark present" title="Present">P</span></td>;
-  if (status === "ABSENT") return <td><span className="mark absent" title="Absent">A</span></td>;
-  return <td><span className="mark empty" title="No finalized record">-</span></td>;
+  return <TableCell className="text-center"><StatusBadge tone={status === "PRESENT" ? "success" : status === "ABSENT" ? "error" : "neutral"}>{status === "PRESENT" ? "P" : status === "ABSENT" ? "A" : "-"}</StatusBadge></TableCell>;
 }
 
 function BelowThresholdPanel() {
   const { register } = useFacultyPortal();
-  const students = register
-    ? register.students.filter((student) => student.present + student.absent > 0 && student.percentage < 75)
-    : [];
-
+  const students = register ? register.students.filter((student) => student.present + student.absent > 0 && student.percentage < 75) : [];
   return (
-    <section className="panel">
-      <div className="section-head">
-        <div>
-          <h2>Below Attendance Threshold</h2>
-          <p>Students below the configured 75% attendance threshold for the selected course.</p>
-        </div>
-        <span className={`status ${students.length > 0 ? "warning" : "success"}`}>{students.length} students</span>
-      </div>
-      {students.length === 0 ? (
-        <div className="empty compact">
-          <Icon name="check" />
-          <h3>No students below threshold</h3>
-          <p>The selected course has no recorded students below 75%.</p>
-        </div>
-      ) : (
-        <div className="roster-table compact-table">
-          {students.slice(0, 10).map((student) => (
-            <div className="table-row" key={student.student_id}>
-              <span>{student.roll_number}</span>
-              <strong>{student.display_name}</strong>
-              <span>{student.present} P | {student.absent} A</span>
-              <span className="status warning">{student.percentage.toFixed(0)}%</span>
-            </div>
-          ))}
-        </div>
+    <Card>
+      <SectionHeading title="Attendance risk" description="Students below the institutional 75% threshold for this course." action={<StatusBadge tone={students.length ? "warning" : "success"}>{students.length} students</StatusBadge>} />
+      {students.length === 0 ? <EmptyPanel icon={Users} title="No students below threshold" description="Every student with recorded attendance currently meets the configured threshold." className="m-5" /> : (
+        <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Roll number</TableHead><TableHead>Student</TableHead><TableHead>Present</TableHead><TableHead>Absent</TableHead><TableHead className="text-right">Rate</TableHead></TableRow></TableHeader><TableBody>{students.slice(0, 10).map((student) => <TableRow key={student.student_id}><TableCell className="font-mono text-xs">{student.roll_number}</TableCell><TableCell className="font-medium">{student.display_name}</TableCell><TableCell>{student.present}</TableCell><TableCell>{student.absent}</TableCell><TableCell className="text-right"><StatusBadge tone="warning">{student.percentage.toFixed(0)}%</StatusBadge></TableCell></TableRow>)}</TableBody></Table></div>
       )}
-    </section>
+    </Card>
+  );
+}
+
+function SessionLedger() {
+  const { sessionHistory } = useFacultyPortal();
+  const records = sessionHistory.slice(0, 12);
+  return (
+    <Card>
+      <SectionHeading title="Session ledger" description="Recent attendance sessions from courses assigned to this faculty account." />
+      {records.length === 0 ? <EmptyPanel icon={CalendarRange} title="No sessions available" description="Completed sessions appear here after synchronization." className="m-5" /> : (
+        <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Course</TableHead><TableHead>State</TableHead><TableHead className="text-right">Present</TableHead></TableRow></TableHeader><TableBody>{records.map((row) => <TableRow key={row.id}><TableCell>{dateLabel(new Date(row.scheduled_start))}</TableCell><TableCell className="font-medium">{row.course_code} · {row.section_code}</TableCell><TableCell><StatusBadge tone={row.state === "ACTIVE" ? "success" : "neutral"}>{titleCase(row.state)}</StatusBadge></TableCell><TableCell className="text-right">{row.present} / {row.expected}</TableCell></TableRow>)}</TableBody></Table></div>
+      )}
+    </Card>
   );
 }

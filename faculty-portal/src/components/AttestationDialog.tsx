@@ -1,7 +1,19 @@
 "use client";
 
+import { ClipboardCheck, RefreshCw, ShieldCheck } from "lucide-react";
 import { useFacultyPortal } from "./FacultyPortalProvider";
-import { Icon } from "./Icons";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const reasons = [
   "Student device failure",
@@ -13,43 +25,40 @@ const reasons = [
 ];
 
 export function AttestationDialog() {
-  const {
-    attestationReason,
-    confirmAttestation,
-    confirmStudent,
-    loading,
-    setAttestationReason,
-    setConfirmStudent,
-  } = useFacultyPortal();
-
-  if (!confirmStudent) return null;
+  const { attestationReason, confirmAttestation, confirmStudent, loading, setAttestationReason, setConfirmStudent } = useFacultyPortal();
 
   return (
-    <div className="dialog-backdrop" role="presentation" onClick={(event) => {
-      if (event.currentTarget === event.target) setConfirmStudent(null);
-    }}>
-      <section className="dialog" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
-        <p className="eyeline">Faculty attestation</p>
-        <h2 id="confirmTitle">Mark attendance manually</h2>
-        <p>Mark <strong>{confirmStudent.display_name}</strong> ({confirmStudent.roll_number}) as <strong>Present</strong> for this session?</p>
-        <label className="dialog-field">
-          <span>Attestation reason</span>
-          <select value={attestationReason} onChange={(event) => setAttestationReason(event.target.value)}>
-            {reasons.map((reason) => <option key={reason} value={reason}>{reason}</option>)}
-          </select>
-        </label>
-        <div className="attestation-audit">
-          <Icon name="check" />
-          <span>Recorded as <strong>FACULTY_ATTESTATION</strong> with faculty identity, timestamp, reason, and audit trail.</span>
-        </div>
-        <div className="dialog-actions">
-          <button className="secondary" onClick={() => setConfirmStudent(null)}>Cancel</button>
-          <button disabled={loading} onClick={() => void confirmAttestation()}>
-            <Icon name="check" />
-            {loading ? "Recording..." : "Confirm Present"}
-          </button>
-        </div>
-      </section>
-    </div>
+    <Dialog open={Boolean(confirmStudent)} onOpenChange={(open) => { if (!open) setConfirmStudent(null); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Faculty attendance attestation</DialogTitle>
+          <DialogDescription>
+            {confirmStudent ? <>Record <strong className="font-medium text-foreground">{confirmStudent.display_name}</strong> ({confirmStudent.roll_number}) as present.</> : "Record a controlled attendance exception."}
+          </DialogDescription>
+        </DialogHeader>
+        <Field>
+          <FieldLabel>Reason</FieldLabel>
+          <Select value={attestationReason} onValueChange={(value) => value && setAttestationReason(value)}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectGroup>{reasons.map((reason) => <SelectItem key={reason} value={reason}>{reason}</SelectItem>)}</SelectGroup>
+            </SelectContent>
+          </Select>
+          <FieldDescription>Select the factual classroom exception reported by the student.</FieldDescription>
+        </Field>
+        <Alert>
+          <ShieldCheck />
+          <AlertTitle>Audited faculty action</AlertTitle>
+          <AlertDescription>The record includes your faculty identity, timestamp, reason, and the method <strong>FACULTY_ATTESTATION</strong>.</AlertDescription>
+        </Alert>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setConfirmStudent(null)}>Cancel</Button>
+          <Button disabled={loading || !confirmStudent} onClick={() => void confirmAttestation()}>
+            {loading ? <RefreshCw data-icon="inline-start" className="animate-spin" /> : <ClipboardCheck data-icon="inline-start" />}
+            {loading ? "Recording" : "Confirm present"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
