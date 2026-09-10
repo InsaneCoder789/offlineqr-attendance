@@ -62,7 +62,7 @@ export function RecordsPage() {
         </div>
       </Card>
 
-      {visibleRegister ? <RegisterPanel /> : <Card><EmptyPanel icon={CalendarRange} title="No register loaded" description="Select an assigned course to load its synchronized attendance records." className="m-5" /></Card>}
+      {visibleRegister ? <RegisterPanel /> : <EmptyPanel icon={CalendarRange} title="No register loaded" description="Select an assigned course to load its synchronized attendance records." />}
       {visibleRegister ? <BelowThresholdPanel /> : null}
       <SessionLedger />
     </>

@@ -112,10 +112,10 @@ export function DashboardPage() {
         <ClassList items={classes} />
       </Card>
 
-      <Card>
+      <section>
         <SectionHeading title="Assigned courses" description="Courses and sections available to your institutional account." action={<Button variant="ghost" size="sm" onClick={() => router.push("/classes")}>View all<ArrowRight data-icon="inline-end" /></Button>} />
         <CourseGrid />
-      </Card>
+      </section>
     </>
   );
 }

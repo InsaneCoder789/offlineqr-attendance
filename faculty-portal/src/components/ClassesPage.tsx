@@ -28,10 +28,10 @@ export function ClassesPage() {
         <SectionHeading title="Today's classes" description="The synchronized teaching plan remains available during a network interruption." action={<StatusBadge tone={ready === classes.length ? "success" : "warning"} icon={ready === classes.length ? undefined : WifiOff}>{ready}/{classes.length} offline-ready</StatusBadge>} />
         <ClassList items={classes} />
       </Card>
-      <Card>
+      <section>
         <SectionHeading title="Course catalog" description="Start attendance or open the course register from a single verified assignment." />
         <CourseGrid showActions />
-      </Card>
+      </section>
     </>
   );
 }

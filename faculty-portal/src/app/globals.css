@@ -159,6 +159,13 @@
   .portal-workspace [data-slot="table-header"] {
     background: color-mix(in oklab, var(--muted) 76%, white);
   }
+
+  .portal-workspace [data-slot="card"] [data-slot="empty"] {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
 }
 
 .projector-stage {

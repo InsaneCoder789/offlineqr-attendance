@@ -11,7 +11,7 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-lg border border-border bg-card py-(--card-spacing) text-sm text-card-foreground [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-lg *:[img:last-child]:rounded-b-lg",
+        "group/card flex flex-col overflow-hidden rounded-lg border border-border bg-card text-sm text-card-foreground shadow-[0_10px_30px_-28px_rgba(20,32,25,0.45)]",
         className
       )}
       {...props}
@@ -24,7 +24,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-lg px-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-(--card-spacing)",
+        "group/card-header @container/card-header grid auto-rows-min items-start gap-1 px-5 py-4 group-data-[size=sm]/card:px-4 group-data-[size=sm]/card:py-3 has-data-[slot=card-action]:grid-cols-[minmax(0,1fr)_auto] has-data-[slot=card-description]:grid-rows-[auto_auto]",
         className
       )}
       {...props}
@@ -72,7 +72,7 @@ function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-content"
-      className={cn("px-(--card-spacing)", className)}
+      className={cn("px-5 pb-5 first:pt-5 group-data-[size=sm]/card:px-4 group-data-[size=sm]/card:pb-4", className)}
       {...props}
     />
   )
@@ -83,7 +83,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "flex items-center rounded-b-lg border-t bg-muted/50 p-(--card-spacing)",
+        "mt-auto flex items-center border-t bg-muted/35 px-5 py-3.5 group-data-[size=sm]/card:px-4 group-data-[size=sm]/card:py-3",
         className
       )}
       {...props}

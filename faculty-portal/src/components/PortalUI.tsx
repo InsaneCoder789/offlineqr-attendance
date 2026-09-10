@@ -62,7 +62,7 @@ export function SectionHeading({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 border-b-2 border-b-border px-5 pb-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="flex flex-col gap-3 border-b border-b-border px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
         {description ? <p className="mt-1 text-sm leading-5 text-muted-foreground">{description}</p> : null}
