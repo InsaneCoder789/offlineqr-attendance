@@ -64,8 +64,8 @@ export function DashboardPage() {
         { label: "Below 75%", value: belowThreshold, icon: AlertTriangle, detail: "Students requiring review" },
       ]} />
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(20rem,0.7fr)]">
-        <Card className="min-h-64 border-l-4 border-l-primary bg-card">
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <Card className="min-h-64 border-l-4 border-l-primary bg-card xl:col-span-8">
           <CardHeader>
             <CardTitle>{activeSession ? "Attendance is live" : next ? "Next scheduled class" : "Teaching schedule complete"}</CardTitle>
             <CardDescription>{activeSession ? "The student roster updates as verified proofs arrive." : next ? "Start the session when the classroom is ready." : "No further classes are scheduled for today."}</CardDescription>
@@ -88,7 +88,7 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="xl:col-span-4">
           <CardHeader>
             <CardTitle>Recent sessions</CardTitle>
             <CardDescription>Latest attendance outcomes</CardDescription>

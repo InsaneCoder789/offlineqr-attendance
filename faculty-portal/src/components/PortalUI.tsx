@@ -41,7 +41,7 @@ export function PageIntro({
   actions?: React.ReactNode;
 }) {
   return (
-    <header className="grid gap-5 border-b-2 border-l-2 border-b-border border-l-primary px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+    <header className="grid gap-5 border-b-2 border-l-4 border-b-border border-l-primary px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
       <div className="min-w-0">
         {eyebrow ? <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary">{eyebrow}</p> : null}
         <h2 className="text-balance text-3xl font-semibold leading-tight tracking-tight md:text-4xl">{title}</h2>
@@ -80,9 +80,9 @@ export function MetricStrip({
   className?: string;
 }) {
   return (
-    <section className={cn("grid overflow-hidden rounded-lg border bg-card shadow-[0_12px_36px_-30px_oklch(0.28_0.08_145)] sm:grid-cols-2 xl:grid-cols-4", className)}>
+    <section className={cn("grid overflow-hidden rounded-lg border-2 border-border bg-card sm:grid-cols-2 xl:grid-cols-4", className)}>
       {metrics.map(({ label, value, icon: Icon, detail }, index) => (
-        <article className={cn("min-w-0 bg-card px-5 py-4", index > 0 && "border-t sm:border-l sm:border-t-0", index === 2 && "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0")} key={label}>
+        <article className={cn("min-w-0 bg-card px-5 py-4", index > 0 && "border-t-2 sm:border-l-2 sm:border-t-0", index === 2 && "sm:border-l-0 sm:border-t-2 xl:border-l-2 xl:border-t-0")} key={label}>
           <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
             <span className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary"><Icon className="size-4" aria-hidden="true" /></span>
             <span>{label}</span>

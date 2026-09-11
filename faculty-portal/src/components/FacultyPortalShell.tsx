@@ -64,7 +64,7 @@ export function FacultyPortalShell({ children }: { children: React.ReactNode }) 
 
   return (
     <SidebarProvider defaultOpen>
-      <Sidebar collapsible="icon" className="border-r border-r-sidebar-border">
+      <Sidebar collapsible="icon" className="border-r-2 border-r-sidebar-border">
         <SidebarHeader className="p-3">
           <Link className="flex h-14 items-center gap-3 overflow-hidden rounded-lg px-2" href="/dashboard">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-white">

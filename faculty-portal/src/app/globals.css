@@ -63,8 +63,8 @@
     --accent: oklch(0.94 0.025 147);
     --accent-foreground: oklch(0.37 0.085 145);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.79 0.012 151);
-    --input: oklch(0.76 0.014 151);
+    --border: oklch(0.71 0.014 151);
+    --input: oklch(0.7 0.016 151);
     --ring: oklch(0.53 0.145 145);
     --chart-1: oklch(0.53 0.145 145);
     --chart-2: oklch(0.66 0.105 147);
@@ -78,7 +78,7 @@
     --sidebar-primary-foreground: oklch(0.99 0.004 145);
     --sidebar-accent: oklch(0.925 0.036 148);
     --sidebar-accent-foreground: oklch(0.36 0.082 145);
-    --sidebar-border: oklch(0.8 0.014 151);
+    --sidebar-border: oklch(0.7 0.016 151);
     --sidebar-ring: oklch(0.53 0.145 145);
 }
 
@@ -152,8 +152,9 @@
   }
 
   .portal-workspace [data-slot="card"] {
+    border-width: 2px;
     border-color: var(--border);
-    box-shadow: 0 12px 30px -28px color-mix(in oklab, var(--foreground) 42%, transparent);
+    box-shadow: none;
   }
 
   .portal-workspace [data-slot="table-header"] {
