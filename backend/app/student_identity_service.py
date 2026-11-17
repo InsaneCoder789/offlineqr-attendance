@@ -23,6 +23,7 @@ _LOCKOUT_DURATION = timedelta(minutes=15)
 def authenticate_student(roll_number: str, password: str) -> tuple[dict, str]:
     roll = _normalize_roll(roll_number)
     now = datetime.now(UTC)
+    rejected = False
     with _connect() as conn:
         with conn.transaction():
             row = conn.execute(
@@ -35,28 +36,33 @@ def authenticate_student(roll_number: str, password: str) -> tuple[dict, str]:
                 [roll],
             ).fetchone()
             if row is None or (row["locked_until"] is not None and row["locked_until"] > now):
-                raise ApiError("INVALID_CREDENTIALS", "Invalid roll number or password.", 401)
-            try:
-                valid = _PASSWORD_HASHER.verify(row["password_hash"], password)
-            except (InvalidHashError, VerifyMismatchError):
-                valid = False
-            if not valid:
-                failures = int(row["failed_login_count"]) + 1
-                locked_until = now + _LOCKOUT_DURATION if failures >= _MAX_FAILED_LOGINS else None
-                conn.execute(
-                    "UPDATE student_credentials SET failed_login_count=%s, locked_until=%s, updated_at=now() WHERE student_id=%s",
-                    [failures, locked_until, row["id"]],
-                )
-                raise ApiError("INVALID_CREDENTIALS", "Invalid roll number or password.", 401)
-            rehash = _PASSWORD_HASHER.hash(password) if _PASSWORD_HASHER.check_needs_rehash(row["password_hash"]) else None
-            conn.execute(
-                """UPDATE student_credentials
-                   SET failed_login_count=0, locked_until=NULL, last_login_at=now(),
-                       password_hash=COALESCE(%s, password_hash), updated_at=now()
-                   WHERE student_id=%s""",
-                [rehash, row["id"]],
-            )
-            profile = _profile(dict(row))
+                rejected = True
+            else:
+                try:
+                    valid = _PASSWORD_HASHER.verify(row["password_hash"], password)
+                except (InvalidHashError, VerifyMismatchError):
+                    valid = False
+                if not valid:
+                    # Commit the failure counter; raising inside the transaction would roll it back.
+                    failures = int(row["failed_login_count"]) + 1
+                    locked_until = now + _LOCKOUT_DURATION if failures >= _MAX_FAILED_LOGINS else None
+                    conn.execute(
+                        "UPDATE student_credentials SET failed_login_count=%s, locked_until=%s, updated_at=now() WHERE student_id=%s",
+                        [failures, locked_until, row["id"]],
+                    )
+                    rejected = True
+                else:
+                    rehash = _PASSWORD_HASHER.hash(password) if _PASSWORD_HASHER.check_needs_rehash(row["password_hash"]) else None
+                    conn.execute(
+                        """UPDATE student_credentials
+                           SET failed_login_count=0, locked_until=NULL, last_login_at=now(),
+                               password_hash=COALESCE(%s, password_hash), updated_at=now()
+                           WHERE student_id=%s""",
+                        [rehash, row["id"]],
+                    )
+                    profile = _profile(dict(row))
+    if rejected:
+        raise ApiError("INVALID_CREDENTIALS", "Invalid roll number or password.", 401)
     return profile, create_student_session(
         profile["id"], must_change_password=profile["must_change_password"]
     )

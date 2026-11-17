@@ -12,7 +12,7 @@ from backend.app.redis_service import clear_development_state
 
 
 DEMO_STUDENT_ID = UUID("50000000-0000-4000-8000-000000000866")
-DEMO_ROLL_NUMBER = "24155866"
+DEMO_ROLL_NUMBER = "90010001"
 TEMPORARY_PASSWORD = "ChangeMe-Dev-Only!2026"
 TEMPORARY_PASSWORD_HASH = (
     "$argon2id$v=19$m=65536,t=3,p=2$Me8ShN1hllx5BzkSSYWoQA$"
@@ -79,6 +79,26 @@ class StudentIdentityApiTest(unittest.TestCase):
         )
         self.assertEqual(relogin.status_code, 200, relogin.text)
         self.assertFalse(relogin.json()["must_change_password"])
+
+    def test_failed_logins_persist_and_lock_the_account(self) -> None:
+        for _ in range(5):
+            bad = self.client.post(
+                "/api/v1/student/auth/login",
+                json={"roll_number": DEMO_ROLL_NUMBER, "password": "wrong-password-value"},
+            )
+            self.assertEqual(bad.status_code, 401)
+        with psycopg.connect(get_settings().database_url) as conn:
+            count, locked = conn.execute(
+                "SELECT failed_login_count, locked_until FROM student_credentials WHERE student_id=%s",
+                [DEMO_STUDENT_ID],
+            ).fetchone()
+        self.assertEqual(count, 5)
+        self.assertIsNotNone(locked)
+        good = self.client.post(
+            "/api/v1/student/auth/login",
+            json={"roll_number": DEMO_ROLL_NUMBER, "password": TEMPORARY_PASSWORD},
+        )
+        self.assertEqual(good.status_code, 401)
 
 
 if __name__ == "__main__":
