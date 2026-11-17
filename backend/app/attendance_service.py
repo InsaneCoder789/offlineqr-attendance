@@ -5,6 +5,7 @@ from uuid import UUID
 import secrets
 
 import psycopg
+import psycopg.errors
 from psycopg.rows import dict_row
 from nacl.signing import SigningKey
 
@@ -12,6 +13,7 @@ from .attendance_protocol import (
     ATTENDANCE_QR_PROTOCOL,
     CLOCK_SKEW_SECONDS,
     QR_EPOCH_SECONDS,
+    SESSION_AUTHORIZATION_MAX_SECONDS,
     SESSION_AUTHORIZATION_PROTOCOL,
     canonical_attendance_claim,
     canonical_attendance_qr,
@@ -21,6 +23,7 @@ from .attendance_protocol import (
     institution_public_key,
     institution_key_id,
     institution_signing_key,
+    javascript_date_precision,
     sign,
     verify,
 )
@@ -307,6 +310,17 @@ def finalize_reconciliation(faculty_id: UUID, session_id: UUID) -> dict:
                 """,
                 [session_id],
             )
+            # Rostered students with no verified record are definitively absent once the window closes.
+            conn.execute(
+                """
+                INSERT INTO attendance_records (attendance_session_id, student_id, status, method, recorded_at)
+                SELECT r.attendance_session_id, r.student_id, 'ABSENT', NULL, now()
+                FROM attendance_session_roster r
+                WHERE r.attendance_session_id = %s
+                ON CONFLICT (attendance_session_id, student_id) DO NOTHING
+                """,
+                [session_id],
+            )
             _audit(conn, "ATTENDANCE_SESSION_RECONCILED", "attendance_session", session_id, str(faculty_id))
             session = _session_by_id(conn, session_id)
             session["authorization"] = _authorization_for_session(conn, session_id, include_private=True)
@@ -392,9 +406,9 @@ def faculty_session_history(faculty_id: UUID, limit: int = 50) -> list[dict]:
                    c.name AS course_name, sec.code AS section_code,
                    te.room, sess.scheduled_start, sess.scheduled_end,
                    sess.state::text AS state,
-                   COUNT(r.student_id)::int AS expected,
-                   COUNT(ar.id) FILTER (WHERE ar.status = 'PRESENT')::int AS present,
-                   COUNT(ar.id) FILTER (WHERE ar.status = 'ABSENT')::int AS absent
+                   COUNT(DISTINCT r.student_id)::int AS expected,
+                   COUNT(DISTINCT ar.id) FILTER (WHERE ar.status = 'PRESENT')::int AS present,
+                   COUNT(DISTINCT ar.id) FILTER (WHERE ar.status = 'ABSENT')::int AS absent
             FROM attendance_sessions sess
             JOIN faculty_assignments fa
               ON fa.course_offering_id = sess.course_offering_id
@@ -435,14 +449,16 @@ def faculty_register(faculty_id: UUID, course_offering_id: UUID) -> dict:
         ).fetchone()
         sessions = conn.execute(
             """
-            SELECT id, scheduled_start, state::text AS state,
-                   to_char(scheduled_start, 'DD Mon') AS label
-            FROM attendance_sessions
-            WHERE course_offering_id = %s
-              AND state IN ('SYNCING', 'RECONCILED')
-              AND scheduled_start <= now()
-            ORDER BY scheduled_start
-            LIMIT 40
+            SELECT * FROM (
+                SELECT id, scheduled_start, state::text AS state,
+                       to_char(scheduled_start, 'DD Mon') AS label
+                FROM attendance_sessions
+                WHERE course_offering_id = %s
+                  AND state IN ('SYNCING', 'RECONCILED')
+                  AND scheduled_start <= now()
+                ORDER BY scheduled_start DESC
+                LIMIT 40
+            ) latest ORDER BY scheduled_start
             """,
             [course_offering_id],
         ).fetchall()
@@ -454,7 +470,7 @@ def faculty_register(faculty_id: UUID, course_offering_id: UUID) -> dict:
             JOIN students s ON s.id = e.student_id
             WHERE e.course_offering_id = %s AND e.active = true
             ORDER BY s.roll_number
-            LIMIT 200
+            LIMIT 500
             """,
             [course_offering_id],
         ).fetchall()
@@ -570,8 +586,9 @@ def qr_payload_for(session_id: UUID, now: datetime | None = None) -> dict:
         valid_until = _aware(auth["valid_until"])
         if current < valid_from or current > valid_until:
             raise ApiError("SESSION_AUTHORIZATION_EXPIRED", "Session authorization is not valid.", 409)
-        epoch = epoch_for(current, _aware(session["started_at"]))
-        issued_at, expires_at = epoch_window(_aware(session["started_at"]), epoch)
+        origin = javascript_date_precision(_aware(session["started_at"]))
+        epoch = epoch_for(current, origin)
+        issued_at, expires_at = epoch_window(origin, epoch)
         challenge = _qr_challenge(session_id, epoch, auth["session_public_key"])
         canonical = canonical_attendance_qr(
             session_id=session_id,
@@ -629,12 +646,12 @@ def submit_attendance_claim(payload: dict) -> dict:
                 device_registration_id=payload["device_registration_id"],
                 qr_epoch=payload["qr_epoch"],
                 qr_challenge=payload["qr_challenge"],
-                qr_issued_at=_aware(payload["qr_issued_at"]).isoformat(),
-                qr_expires_at=_aware(payload["qr_expires_at"]).isoformat(),
+                qr_issued_at=payload["qr_issued_at"],
+                qr_expires_at=payload["qr_expires_at"],
                 qr_signature=payload["qr_signature"],
-                qr_captured_at=_aware(payload["qr_captured_at"]).isoformat(),
-                claim_created_at=_aware(payload["claim_created_at"]).isoformat(),
-                claim_expires_at=_aware(payload["claim_expires_at"]).isoformat(),
+                qr_captured_at=payload["qr_captured_at"],
+                claim_created_at=payload["claim_created_at"],
+                claim_expires_at=payload["claim_expires_at"],
             )
             if not verify_signature(device["public_key"], canonical, payload["device_signature"]):
                 raise ApiError("INVALID_CLAIM_SIGNATURE", "Claim signature is invalid.", 400)
@@ -693,6 +710,11 @@ def submit_attendance_proof_submission(submission: dict) -> dict:
                 "TEMPORARY_DATABASE_ERROR",
             },
         )
+    except psycopg.errors.IntegrityError:
+        # e.g. a second claim_id for the same (session, student): permanent, must not poison the batch.
+        return _proof_rejection(submission.get("proof", {}).get("proof_id"), "CLAIM_CONFLICT", retryable=False)
+    except psycopg.Error:
+        return _proof_rejection(submission.get("proof", {}).get("proof_id"), "TEMPORARY_DATABASE_ERROR", retryable=True)
 
 
 def submit_attendance_proof_batch(submissions: list[dict]) -> list[dict]:
@@ -929,12 +951,12 @@ def _ensure_claim_for_proof(conn, payload: dict, public_key: str, session: dict)
         device_registration_id=payload["device_registration_id"],
         qr_epoch=payload["qr_epoch"],
         qr_challenge=payload["qr_challenge"],
-        qr_issued_at=_aware(payload["qr_issued_at"]).isoformat(),
-        qr_expires_at=_aware(payload["qr_expires_at"]).isoformat(),
+        qr_issued_at=payload["qr_issued_at"],
+        qr_expires_at=payload["qr_expires_at"],
         qr_signature=payload["qr_signature"],
-        qr_captured_at=captured_at.isoformat(),
-        claim_created_at=created_at.isoformat(),
-        claim_expires_at=expires_at.isoformat(),
+        qr_captured_at=payload["qr_captured_at"],
+        claim_created_at=payload["claim_created_at"],
+        claim_expires_at=payload["claim_expires_at"],
     )
     if not verify_signature(public_key_b64url=public_key, payload=canonical, signature_b64url=payload["device_signature"]):
         raise ApiError("INVALID_SIGNATURE", "Claim signature is invalid.", 400)
@@ -986,8 +1008,9 @@ def _validate_signed_qr_evidence(conn, payload: dict, session: dict) -> None:
         raise ApiError("QR_EXPIRED", "QR validity window is invalid.", 409)
     if not (issued_at - timedelta(seconds=CLOCK_SKEW_SECONDS) <= captured_at <= expires_at + timedelta(seconds=CLOCK_SKEW_SECONDS)):
         raise ApiError("QR_EXPIRED", "QR was not captured during its signed validity window.", 409)
-    expected_epoch = epoch_for(issued_at, _aware(session["started_at"]))
-    expected_issued_at, expected_expires_at = epoch_window(_aware(session["started_at"]), expected_epoch)
+    origin = javascript_date_precision(_aware(session["started_at"]))
+    expected_epoch = epoch_for(issued_at, origin)
+    expected_issued_at, expected_expires_at = epoch_window(origin, expected_epoch)
     expected_challenge = _qr_challenge(session["id"], expected_epoch, authorization["session_public_key"])
     if (
         payload["qr_epoch"] != expected_epoch
@@ -999,8 +1022,8 @@ def _validate_signed_qr_evidence(conn, payload: dict, session: dict) -> None:
     canonical = canonical_attendance_qr(
         session_id=session["id"],
         epoch=payload["qr_epoch"],
-        issued_at=issued_at.isoformat(),
-        expires_at=expires_at.isoformat(),
+        issued_at=payload["qr_issued_at"],
+        expires_at=payload["qr_expires_at"],
         challenge=payload["qr_challenge"],
         key_id=authorization["key_id"],
     )
@@ -1034,7 +1057,7 @@ def _verify_presence_and_proof_signatures(public_key: str, challenge: dict, resp
         claim_id=response["claim_id"],
         device_registration_id=response["device_registration_id"],
         presence_epoch=response["presence_epoch"],
-        responded_at=responded_at.isoformat(),
+        responded_at=response["responded_at"],
         transport=response["transport"],
         challenge_nonce=response["challenge_nonce"],
         host_public_key=response["host_public_key"],
@@ -1049,7 +1072,7 @@ def _verify_presence_and_proof_signatures(public_key: str, challenge: dict, resp
         device_registration_id=proof["device_registration_id"],
         presence_challenge_id=proof["presence_challenge_id"],
         presence_response_id=proof["presence_response_id"],
-        proof_created_at=proof_created_at.isoformat(),
+        proof_created_at=proof["proof_created_at"],
     )
     if not verify_signature(public_key_b64url=public_key, payload=proof_payload, signature_b64url=proof["final_device_signature"]):
         raise ApiError("INVALID_SIGNATURE", "Attendance proof signature is invalid.", 400)
@@ -1121,15 +1144,46 @@ def _require_faculty_offering(conn, faculty_id: UUID, course_offering_id: UUID) 
 
 
 def _ensure_authorization(conn, session_id: UUID, faculty_id: UUID, course_offering_id: UUID, scheduled_start: datetime, scheduled_end: datetime) -> dict:
+    now = datetime.now(UTC)
     existing = _authorization_for_session(conn, session_id, include_private=True)
     if existing is not None:
-        return existing
+        valid_from = _aware(existing["valid_from"])
+        valid_until = _aware(existing["valid_until"])
+        maximum_lifetime = timedelta(seconds=SESSION_AUTHORIZATION_MAX_SECONDS)
+        if valid_until - valid_from <= maximum_lifetime:
+            return existing
+
+        # Repair authorizations issued by older builds that exceeded the
+        # mobile verifier's bounded trust window.
+        valid_from = valid_until - maximum_lifetime
+        conn.execute(
+            "UPDATE session_authorizations SET valid_from = %s WHERE id = %s",
+            [valid_from, existing["authorization_id"]],
+        )
+        repaired = _authorization_for_session(conn, session_id, include_private=True)
+        canonical = canonical_session_authorization(
+            authorization_id=repaired["authorization_id"],
+            session_id=repaired["session_id"],
+            course_offering_id=repaired["course_offering_id"],
+            faculty_id=repaired["faculty_id"],
+            valid_from=repaired["valid_from"].isoformat(),
+            valid_until=repaired["valid_until"].isoformat(),
+            key_id=repaired["key_id"],
+            session_public_key=repaired["session_public_key"],
+        )
+        conn.execute(
+            "UPDATE session_authorizations SET server_signature = %s WHERE id = %s",
+            [sign(institution_signing_key(), canonical), repaired["authorization_id"]],
+        )
+        return _authorization_for_session(conn, session_id, include_private=True)
     key = SigningKey.generate()
     session_public_key = _b64(bytes(key.verify_key))
     session_private_key = _b64(bytes(key))
-    now = datetime.now(UTC)
     valid_from = min(scheduled_start - timedelta(minutes=15), now - timedelta(minutes=1))
     valid_until = max(scheduled_end + timedelta(minutes=15), now + timedelta(hours=2))
+    maximum_lifetime = timedelta(seconds=SESSION_AUTHORIZATION_MAX_SECONDS)
+    if valid_until - valid_from > maximum_lifetime:
+        valid_from = valid_until - maximum_lifetime
     row = conn.execute(
         """
         INSERT INTO session_authorizations (
@@ -1222,17 +1276,26 @@ def _b64(value: bytes) -> str:
     return b64url_encode(value)
 
 
-def _aware(value: datetime) -> datetime:
+def _aware(value: datetime | str) -> datetime:
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ApiError("PROOF_MALFORMED", "A signed timestamp is not valid ISO 8601.", 400) from exc
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
 
 
+_STUDENT_AUDIT_EVENTS = {"ATTENDANCE_CLAIM_CAPTURED", "ATTENDANCE_PROOF_ACCEPTED"}
+
+
 def _audit(conn, event_type: str, entity_type: str, entity_id, actor_id: str) -> None:
+    actor_type = "student" if event_type in _STUDENT_AUDIT_EVENTS else "faculty"
     conn.execute(
         """
         INSERT INTO audit_logs (event_type, entity_type, entity_id, actor_type, actor_id, metadata)
-        VALUES (%s, %s, %s, 'development', %s, '{}'::jsonb)
+        VALUES (%s, %s, %s, %s, %s, '{}'::jsonb)
         """,
-        [event_type, entity_type, entity_id, actor_id],
+        [event_type, entity_type, entity_id, actor_type, actor_id],
     )

@@ -144,7 +144,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Correlation-Id"],
 )
-logger = logging.getLogger("kiit_attendance.sync")
+logger = logging.getLogger("offlineqr_attendance.sync")
 
 
 def _require_development_identity() -> None:
@@ -153,7 +153,7 @@ def _require_development_identity() -> None:
 
 
 def _faculty_id_from_request(request: Request) -> UUID:
-    token = request.cookies.get("kiit_faculty_session", "")
+    token = request.cookies.get("offlineqr_faculty_session", "")
     if token:
         session = faculty_session(token)
         if session is None:
@@ -162,7 +162,14 @@ def _faculty_id_from_request(request: Request) -> UUID:
             supplied_csrf = request.headers.get("x-csrf-token", "")
             if not supplied_csrf or not secrets.compare_digest(supplied_csrf, session["csrf"]):
                 raise ApiError("CSRF_VALIDATION_FAILED", "Request could not be verified.", 403)
-        return UUID(session["faculty_id"])
+        faculty_id = UUID(session["faculty_id"])
+        try:
+            faculty_profile(faculty_id)  # rejects deactivated accounts holding a live session
+        except ApiError as exc:
+            if exc.status_code == 404:
+                raise ApiError("FACULTY_SESSION_EXPIRED", "Faculty session has expired. Sign in again.", 401) from exc
+            raise
+        return faculty_id
     if get_settings().development_enabled and request.headers.get("x-faculty-id"):
         identity = request.headers["x-faculty-id"]
         faculty = get_faculty_by_identity(identity)
@@ -200,7 +207,10 @@ def _student_id_from_request(request: Request) -> UUID:
         except (ValueError, KeyError) as exc:
             raise ApiError("STUDENT_SESSION_EXPIRED", "Student sign-in is invalid.", 401) from exc
     if get_settings().development_enabled and request.headers.get("x-student-id"):
-        return UUID(request.headers["x-student-id"])
+        try:
+            return UUID(request.headers["x-student-id"])
+        except ValueError as exc:
+            raise ApiError("STUDENT_AUTH_REQUIRED", "Student identity header is invalid.", 401) from exc
     raise ApiError("STUDENT_AUTH_REQUIRED", "Student sign-in is required.", 401)
 
 
@@ -272,7 +282,7 @@ def faculty_login(payload: FacultyLoginIn, response: Response) -> dict:
     profile, token, csrf_token = authenticate_faculty(payload.email, payload.password)
     auth_settings = get_settings()
     response.set_cookie(
-        "kiit_faculty_session",
+        "offlineqr_faculty_session",
         token,
         max_age=auth_settings.faculty_session_ttl_seconds,
         httponly=True,
@@ -281,7 +291,7 @@ def faculty_login(payload: FacultyLoginIn, response: Response) -> dict:
         path="/",
     )
     response.set_cookie(
-        "kiit_faculty_csrf",
+        "offlineqr_faculty_csrf",
         csrf_token,
         max_age=auth_settings.faculty_session_ttl_seconds,
         httponly=False,
@@ -299,11 +309,11 @@ def faculty_oidc_login(payload: OidcTokenIn, response: Response) -> dict:
     profile = faculty_profile(faculty["id"])
     token, csrf_token = create_faculty_session(faculty["id"])
     response.set_cookie(
-        "kiit_faculty_session", token, max_age=settings.faculty_session_ttl_seconds,
+        "offlineqr_faculty_session", token, max_age=settings.faculty_session_ttl_seconds,
         httponly=True, secure=settings.faculty_cookie_secure, samesite="strict", path="/",
     )
     response.set_cookie(
-        "kiit_faculty_csrf", csrf_token, max_age=settings.faculty_session_ttl_seconds,
+        "offlineqr_faculty_csrf", csrf_token, max_age=settings.faculty_session_ttl_seconds,
         httponly=False, secure=settings.faculty_cookie_secure, samesite="strict", path="/",
     )
     return profile
@@ -311,12 +321,10 @@ def faculty_oidc_login(payload: OidcTokenIn, response: Response) -> dict:
 
 @app.post("/api/v1/faculty/auth/logout")
 def faculty_logout(request: Request, response: Response) -> dict:
-    token = request.cookies.get("kiit_faculty_session", "")
-    if token:
-        _faculty_id_from_request(request)
-    revoke_faculty_session(token)
-    response.delete_cookie("kiit_faculty_session", path="/")
-    response.delete_cookie("kiit_faculty_csrf", path="/")
+    token = request.cookies.get("offlineqr_faculty_session", "")
+    revoke_faculty_session(token)  # expired sessions must still be able to clear their cookies
+    response.delete_cookie("offlineqr_faculty_session", path="/")
+    response.delete_cookie("offlineqr_faculty_csrf", path="/")
     return {"result": "signed_out"}
 
 
@@ -337,8 +345,8 @@ def faculty_change_password(
     response: Response,
 ) -> dict:
     change_faculty_password(_faculty_id_from_request(request), payload.current_password, payload.new_password)
-    response.delete_cookie("kiit_faculty_session", path="/")
-    response.delete_cookie("kiit_faculty_csrf", path="/")
+    response.delete_cookie("offlineqr_faculty_session", path="/")
+    response.delete_cookie("offlineqr_faculty_csrf", path="/")
     return {"result": "password_changed"}
 
 
@@ -465,7 +473,7 @@ async def faculty_session_events(websocket: WebSocket, session_id: UUID) -> None
     if not _websocket_origin_allowed(websocket.headers.get("origin")):
         await websocket.close(code=1008)
         return
-    token = websocket.cookies.get("kiit_faculty_session", "")
+    token = websocket.cookies.get("offlineqr_faculty_session", "")
     identity = faculty_session(token) if token else None
     if identity is None:
         await websocket.close(code=1008)

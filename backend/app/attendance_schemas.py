@@ -181,6 +181,10 @@ class FacultyAttestationIn(BaseModel):
 
 
 class QrPayloadOut(BaseModel):
+    # QR timestamps are signed as text, so serialization must retain the same
+    # ISO-8601 representation used by the canonical signing payload.
+    model_config = ConfigDict(json_encoders={datetime: lambda value: value.isoformat()})
+
     protocol_version: str
     session_id: UUID
     epoch: int
@@ -199,12 +203,13 @@ class AttendanceClaimIn(BaseModel):
     device_registration_id: UUID
     qr_epoch: int
     qr_challenge: str
-    qr_issued_at: datetime
-    qr_expires_at: datetime
+    # Signed protocol values must retain their exact wire representation.
+    qr_issued_at: str
+    qr_expires_at: str
     qr_signature: str
-    qr_captured_at: datetime
-    claim_created_at: datetime
-    claim_expires_at: datetime
+    qr_captured_at: str
+    claim_created_at: str
+    claim_expires_at: str
     device_signature: str
 
 
@@ -221,8 +226,8 @@ class PresenceChallengeIn(BaseModel):
     claim_id: UUID
     presence_epoch: int
     nonce: str
-    issued_at: datetime
-    expires_at: datetime
+    issued_at: str
+    expires_at: str
     transport: str
     host_public_key: str
 
@@ -234,7 +239,7 @@ class PresenceResponseIn(BaseModel):
     claim_id: UUID
     device_registration_id: UUID
     presence_epoch: int
-    responded_at: datetime
+    responded_at: str
     transport: str
     challenge_nonce: str
     host_public_key: str
@@ -249,7 +254,7 @@ class AttendanceProofIn(BaseModel):
     device_registration_id: UUID
     presence_challenge_id: UUID
     presence_response_id: UUID
-    proof_created_at: datetime
+    proof_created_at: str
     final_device_signature: str
 
 
@@ -274,7 +279,7 @@ class AttendanceProofResultOut(BaseModel):
 
 
 class AttendanceProofBatchIn(BaseModel):
-    proofs: list[AttendanceProofSubmissionIn]
+    proofs: list[AttendanceProofSubmissionIn] = Field(max_length=50)
 
 
 class AttendanceProofBatchOut(BaseModel):
