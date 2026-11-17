@@ -2,6 +2,13 @@ import type { SessionAuthorization } from "./protocol";
 
 export const ATTENDANCE_API_BASE = process.env.NEXT_PUBLIC_ATTENDANCE_API_BASE ?? "http://127.0.0.1:8000";
 
+export class ApiRequestError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
 export type FacultyClass = {
   course_offering_id: string;
   course_code: string;
@@ -104,8 +111,43 @@ export type FacultyRegister = {
 };
 
 export function cachedFacultyIdentity(): FacultyIdentity | null {
-  const raw = localStorage.getItem("faculty.identity");
-  return raw ? (JSON.parse(raw) as FacultyIdentity) : null;
+  return readCache<FacultyIdentity | null>("faculty.identity", null);
+}
+
+function readCache<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as T;
+    if (Array.isArray(fallback) && !Array.isArray(parsed)) return fallback;
+    return parsed;
+  } catch {
+    try { localStorage.removeItem(key); } catch { /* Storage can be disabled. */ }
+    return fallback;
+  }
+}
+
+// The active session carries the QR signing key, so it lives in per-tab sessionStorage
+// (cleared when the tab closes) instead of the long-lived localStorage cache.
+const ACTIVE_SESSION_KEY = "faculty.activeSession";
+
+function saveActiveSession(value: string): void {
+  try { sessionStorage.setItem(ACTIVE_SESSION_KEY, value); } catch { /* Storage can be disabled. */ }
+  try { localStorage.removeItem(ACTIVE_SESSION_KEY); } catch { /* Storage can be disabled. */ }
+}
+
+function clearActiveSession(): void {
+  try { sessionStorage.removeItem(ACTIVE_SESSION_KEY); } catch { /* Storage can be disabled. */ }
+  try { localStorage.removeItem(ACTIVE_SESSION_KEY); } catch { /* Storage can be disabled. */ }
+}
+
+function readActiveSession(): FacultySession | null {
+  try {
+    const raw = sessionStorage.getItem(ACTIVE_SESSION_KEY);
+    return raw ? (JSON.parse(raw) as FacultySession) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function saveFacultyIdentity(identity: FacultyIdentity): void {
@@ -113,14 +155,16 @@ export function saveFacultyIdentity(identity: FacultyIdentity): void {
 }
 
 export function clearFacultyIdentity(): void {
-  localStorage.removeItem("faculty.identity");
-  localStorage.removeItem("faculty.activeSession");
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("faculty.")) localStorage.removeItem(key);
+  }
+  clearActiveSession();
 }
 
 function csrfToken(): string {
   const token = document.cookie
     .split("; ")
-    .find((item) => item.startsWith("kiit_faculty_csrf="))
+    .find((item) => item.startsWith("offlineqr_faculty_csrf="))
     ?.split("=")[1];
   return token ? decodeURIComponent(token) : "";
 }
@@ -206,7 +250,7 @@ export async function fetchTodayClasses(): Promise<FacultyClass[]> {
 }
 
 export function cachedTodayClasses(): FacultyClass[] {
-  return JSON.parse(localStorage.getItem("faculty.todayClasses") ?? "[]") as FacultyClass[];
+  return readCache<FacultyClass[]>("faculty.todayClasses", []);
 }
 
 export async function fetchFacultyCourses(): Promise<FacultyCourse[]> {
@@ -218,7 +262,7 @@ export async function fetchFacultyCourses(): Promise<FacultyCourse[]> {
 }
 
 export function cachedFacultyCourses(): FacultyCourse[] {
-  return JSON.parse(localStorage.getItem("faculty.courses") ?? "[]") as FacultyCourse[];
+  return readCache<FacultyCourse[]>("faculty.courses", []);
 }
 
 export async function fetchSessionHistory(): Promise<FacultySessionRecord[]> {
@@ -230,7 +274,7 @@ export async function fetchSessionHistory(): Promise<FacultySessionRecord[]> {
 }
 
 export function cachedSessionHistory(): FacultySessionRecord[] {
-  return JSON.parse(localStorage.getItem("faculty.sessionHistory") ?? "[]") as FacultySessionRecord[];
+  return readCache<FacultySessionRecord[]>("faculty.sessionHistory", []);
 }
 
 export async function fetchFacultyRegister(courseOfferingId: string): Promise<FacultyRegister> {
@@ -243,8 +287,7 @@ export async function fetchFacultyRegister(courseOfferingId: string): Promise<Fa
 
 export function cachedFacultyRegister(courseOfferingId: string | null): FacultyRegister | null {
   if (!courseOfferingId) return null;
-  const raw = localStorage.getItem(`faculty.register.${courseOfferingId}`);
-  return raw ? (JSON.parse(raw) as FacultyRegister) : null;
+  return readCache<FacultyRegister | null>(`faculty.register.${courseOfferingId}`, null);
 }
 
 export async function startSession(courseOfferingId: string): Promise<FacultySession> {
@@ -252,9 +295,12 @@ export async function startSession(courseOfferingId: string): Promise<FacultySes
     method: "POST",
     body: JSON.stringify({ course_offering_id: courseOfferingId }),
   });
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new ApiRequestError(response.status, body?.error?.message ?? "Attendance session could not be started.");
+  }
   const session = (await response.json()) as FacultySession;
-  localStorage.setItem("faculty.activeSession", JSON.stringify(session));
+  saveActiveSession(JSON.stringify(session));
   return session;
 }
 
@@ -269,7 +315,7 @@ export async function prepareOfflineSessions(): Promise<FacultySession[]> {
 }
 
 export function cachedOfflineSessions(): FacultySession[] {
-  return JSON.parse(localStorage.getItem("faculty.offlineSessions") ?? "[]") as FacultySession[];
+  return readCache<FacultySession[]>("faculty.offlineSessions", []);
 }
 
 export function startCachedOfflineSession(courseOfferingId: string): FacultySession {
@@ -284,7 +330,7 @@ export function startCachedOfflineSession(courseOfferingId: string): FacultySess
     state: "ACTIVE",
     offline_pending_activation: true,
   };
-  localStorage.setItem("faculty.activeSession", JSON.stringify(session));
+  saveActiveSession(JSON.stringify(session));
   return session;
 }
 
@@ -292,11 +338,11 @@ export function queueOfflineSessionClose(session: FacultySession): void {
   const pending = pendingSessionCloses().filter((item) => item.sessionId !== session.id);
   pending.push({ sessionId: session.id, courseOfferingId: session.course_offering_id });
   localStorage.setItem("faculty.pendingSessionCloses", JSON.stringify(pending));
-  localStorage.removeItem("faculty.activeSession");
+  clearActiveSession();
 }
 
 export function pendingSessionCloses(): PendingSessionClose[] {
-  return JSON.parse(localStorage.getItem("faculty.pendingSessionCloses") ?? "[]") as PendingSessionClose[];
+  return readCache<PendingSessionClose[]>("faculty.pendingSessionCloses", []);
 }
 
 export async function reconcileOfflineSessions(): Promise<FacultySession | null> {
@@ -319,12 +365,11 @@ export async function reconcileOfflineSessions(): Promise<FacultySession | null>
 }
 
 export function cachedActiveSession(): FacultySession | null {
-  const raw = localStorage.getItem("faculty.activeSession");
-  return raw ? (JSON.parse(raw) as FacultySession) : null;
+  return readActiveSession();
 }
 
 export function clearCachedActiveSession(): void {
-  localStorage.removeItem("faculty.activeSession");
+  clearActiveSession();
 }
 
 export async function fetchSession(sessionId: string): Promise<FacultySession | null> {
@@ -332,7 +377,7 @@ export async function fetchSession(sessionId: string): Promise<FacultySession | 
   if (response.status === 404 || response.status === 403) return null;
   if (!response.ok) throw new Error("Could not verify active session");
   const verified = (await response.json()) as FacultySession;
-  localStorage.setItem("faculty.activeSession", JSON.stringify(verified));
+  saveActiveSession(JSON.stringify(verified));
   return verified;
 }
 
@@ -341,7 +386,7 @@ export async function closeSession(sessionId: string): Promise<void> {
     method: "POST",
   });
   if (!response.ok) throw new Error("Could not close attendance session");
-  localStorage.removeItem("faculty.activeSession");
+  clearActiveSession();
 }
 
 export async function fetchRoster(sessionId: string): Promise<RosterStudent[]> {
@@ -355,7 +400,7 @@ export async function fetchRoster(sessionId: string): Promise<RosterStudent[]> {
 }
 
 export function cachedRoster(sessionId: string): RosterStudent[] {
-  return JSON.parse(localStorage.getItem(`faculty.roster.${sessionId}`) ?? "[]") as RosterStudent[];
+  return readCache<RosterStudent[]>(`faculty.roster.${sessionId}`, []);
 }
 
 export async function attest(sessionId: string, studentId: string, reason: string): Promise<void> {
