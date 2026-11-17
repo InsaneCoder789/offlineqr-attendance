@@ -13,6 +13,7 @@ class Settings:
     institution_signing_key_id: str
     redis_url: str
     redis_required: bool
+    trusted_proxy_hops: int
     faculty_session_ttl_seconds: int
     student_session_ttl_seconds: int
     faculty_cookie_secure: bool
@@ -41,7 +42,7 @@ def get_settings() -> Settings:
     return Settings(
         database_url=os.environ.get(
             "DATABASE_URL",
-            "postgresql://localhost/kiit_attendance_goal02",
+            "postgresql://localhost/offlineqr_attendance_goal02",
         ),
         app_env=os.environ.get("APP_ENV", "development"),
         dev_student_id=os.environ.get(
@@ -63,6 +64,7 @@ def get_settings() -> Settings:
         redis_url=os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0"),
         redis_required=os.environ.get("REDIS_REQUIRED", "").lower() in {"1", "true", "yes"}
         or os.environ.get("APP_ENV", "development") != "development",
+        trusted_proxy_hops=int(os.environ.get("TRUSTED_PROXY_HOPS", "0")),
         faculty_session_ttl_seconds=int(os.environ.get("FACULTY_SESSION_TTL_SECONDS", "28800")),
         student_session_ttl_seconds=int(os.environ.get("STUDENT_SESSION_TTL_SECONDS", "43200")),
         faculty_cookie_secure=os.environ.get("FACULTY_COOKIE_SECURE", "").lower() in {"1", "true", "yes"}

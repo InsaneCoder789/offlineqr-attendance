@@ -54,6 +54,16 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
         else:
             scope, limit = path.split("/")[3], 180
         try:
+            if scope in {"faculty-auth", "student-auth", "attendance"}:
+                # Per-IP ceiling: rotating a bogus credential must not mint a fresh bucket.
+                ip_limit = limit * (5 if scope == "attendance" else 3)
+                ip_result = consume_rate_limit(f"{scope}-ip", f"ip:{self._client_ip(request)}", limit=ip_limit, window_seconds=60)
+                if not ip_result.allowed:
+                    return JSONResponse(
+                        status_code=429,
+                        content={"error": {"code": "RATE_LIMITED", "message": "Too many requests. Try again shortly."}},
+                        headers={"Retry-After": str(ip_result.retry_after_seconds)},
+                    )
             result = consume_rate_limit(scope, source, limit=limit, window_seconds=60)
         except ApiError as exc:
             return JSONResponse(
@@ -71,9 +81,18 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
     @staticmethod
     def _subject(request: Request) -> str:
         authorization = request.headers.get("authorization", "")[:512]
-        faculty_session = request.cookies.get("kiit_faculty_session", "")[:256]
+        faculty_session = request.cookies.get("offlineqr_faculty_session", "")[:256]
         credential = authorization or faculty_session
         if credential:
             return f"session:{sha256(credential.encode('utf-8')).hexdigest()}"
-        source_ip = request.client.host if request.client else "unknown"
-        return f"ip:{source_ip}"
+        return f"ip:{RedisRateLimitMiddleware._client_ip(request)}"
+
+    @staticmethod
+    def _client_ip(request: Request) -> str:
+        """Peer address, or the Nth-from-right X-Forwarded-For entry when proxies are trusted."""
+        hops = get_settings().trusted_proxy_hops
+        if hops > 0:
+            parts = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
+            if len(parts) >= hops:
+                return parts[-hops][:64]
+        return request.client.host if request.client else "unknown"
