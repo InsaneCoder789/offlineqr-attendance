@@ -14,6 +14,7 @@ class Settings:
     redis_url: str
     redis_required: bool
     trusted_proxy_hops: int
+    db_pool_max: int
     faculty_session_ttl_seconds: int
     student_session_ttl_seconds: int
     faculty_cookie_secure: bool
@@ -64,6 +65,7 @@ def get_settings() -> Settings:
         redis_url=os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0"),
         redis_required=os.environ.get("REDIS_REQUIRED", "").lower() in {"1", "true", "yes"}
         or os.environ.get("APP_ENV", "development") != "development",
+        db_pool_max=int(os.environ.get("DB_POOL_MAX", "0")),
         trusted_proxy_hops=int(os.environ.get("TRUSTED_PROXY_HOPS", "0")),
         faculty_session_ttl_seconds=int(os.environ.get("FACULTY_SESSION_TTL_SECONDS", "28800")),
         student_session_ttl_seconds=int(os.environ.get("STUDENT_SESSION_TTL_SECONDS", "43200")),

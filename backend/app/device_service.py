@@ -12,6 +12,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from .config import get_settings
+from .db import connect
 from .device_crypto import (
     SUPPORTED_ALGORITHM,
     b64url_encode,
@@ -492,13 +493,13 @@ def create_activation_qr(*, request_id: UUID, issued_by: str) -> dict[str, Any]:
                 [request["student_id"], request_id, request["new_device_registration_id"], token_hash, issued_by, ACTIVATION_QR_TTL_SECONDS],
             ).fetchone()
             _audit(conn, request["student_id"], "DEVICE_ACTIVATION_QR_ISSUED", "device_replacement_request", request_id, {"issued_by": issued_by})
-            return {"replacement_request_id": request_id, "qr_payload": f"kiit-device-activate:{token}", "expires_at": row["expires_at"]}
+            return {"replacement_request_id": request_id, "qr_payload": f"offlineqr-device-activate:{token}", "expires_at": row["expires_at"]}
 
 
 def consume_activation_qr(*, student_id: UUID, qr_payload: str) -> dict[str, Any]:
-    prefix = "kiit-device-activate:"
+    prefix = "offlineqr-device-activate:"
     if not qr_payload.startswith(prefix):
-        raise ApiError("INVALID_DEVICE_ACTIVATION_QR", "This is not a KIIT device activation QR.", 400)
+        raise ApiError("INVALID_DEVICE_ACTIVATION_QR", "This is not a Institution device activation QR.", 400)
     token = qr_payload.removeprefix(prefix)
     if not token or len(token) > 256:
         raise ApiError("INVALID_DEVICE_ACTIVATION_QR", "This device activation QR is invalid.", 400)
@@ -636,7 +637,7 @@ def current_replacement_request(student_id: UUID) -> dict[str, Any] | None:
 
 
 def _connect() -> psycopg.Connection:
-    return psycopg.connect(get_settings().database_url, row_factory=dict_row)
+    return connect()
 
 
 def _create_challenge(

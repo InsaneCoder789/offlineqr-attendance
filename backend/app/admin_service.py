@@ -8,6 +8,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from .config import get_settings
+from .db import connect
 from .errors import ApiError
 
 
@@ -166,4 +167,4 @@ def _public_device(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _connect() -> psycopg.Connection:
-    return psycopg.connect(get_settings().database_url, row_factory=dict_row)
+    return connect()

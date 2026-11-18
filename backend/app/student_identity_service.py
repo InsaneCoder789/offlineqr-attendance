@@ -11,6 +11,7 @@ from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from psycopg.rows import dict_row
 
 from .config import get_settings
+from .db import connect
 from .errors import ApiError
 from .redis_service import create_student_session, revoke_student_sessions
 
@@ -151,4 +152,4 @@ def _temporary_password() -> str:
 
 
 def _connect() -> psycopg.Connection:
-    return psycopg.connect(get_settings().database_url, row_factory=dict_row)
+    return connect()
