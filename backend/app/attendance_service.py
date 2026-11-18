@@ -28,6 +28,7 @@ from .attendance_protocol import (
     verify,
 )
 from .config import get_settings
+from .db import connect
 from .device_crypto import verify_signature
 from .errors import ApiError
 from .institution_clock import institution_local_to_utc, institution_today
@@ -39,7 +40,7 @@ from .presence_protocol import (
 
 
 def _connect():
-    return psycopg.connect(get_settings().database_url, row_factory=dict_row)
+    return connect()
 
 
 def today_faculty_classes(faculty_id: UUID, today: date | None = None) -> list[dict]:
@@ -551,8 +552,18 @@ def attest_student(faculty_id: UUID, session_id: UUID, student_id: UUID, reason:
                 )
                 VALUES (%s, %s, 'PRESENT', 'FACULTY_ATTESTATION', now())
                 ON CONFLICT (attendance_session_id, student_id)
-                DO UPDATE SET status = 'PRESENT', method = 'FACULTY_ATTESTATION',
-                              recorded_at = now(), updated_at = now()
+                DO UPDATE SET status = 'PRESENT',
+                              method = CASE
+                                WHEN attendance_records.status = 'PRESENT'
+                                 AND attendance_records.method = 'SECURE_PROOF'
+                                THEN attendance_records.method
+                                ELSE 'FACULTY_ATTESTATION'
+                              END,
+                              recorded_at = CASE
+                                WHEN attendance_records.status = 'PRESENT' THEN attendance_records.recorded_at
+                                ELSE now()
+                              END,
+                              updated_at = now()
                 RETURNING id, attendance_session_id, student_id, status::text AS status,
                           method::text AS method, recorded_at
                 """,
