@@ -486,12 +486,18 @@ async def faculty_session_events(websocket: WebSocket, session_id: UUID) -> None
         return
     await websocket.accept()
     version = -1
+    ticks = 0
     try:
         while True:
-            next_version = session_event_version(session_id)
+            # Redis and PostgreSQL clients are blocking; keep them off the event loop.
+            next_version = await asyncio.to_thread(session_event_version, session_id)
             if next_version != version:
                 version = next_version
                 await websocket.send_json({"type": "SESSION_UPDATED", "session_id": str(session_id), "version": version})
+            ticks += 1
+            if ticks % 30 == 0 and await asyncio.to_thread(faculty_session, token) is None:
+                await websocket.close(code=1008)  # session revoked or expired mid-stream
+                return
             await asyncio.sleep(1)
     except Exception as exc:
         logger.debug("faculty_session_websocket_closed", extra={"session_id": str(session_id), "reason": type(exc).__name__})

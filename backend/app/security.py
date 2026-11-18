@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 from hashlib import sha256
+from time import perf_counter
 from uuid import uuid4
 
 from fastapi import Request
@@ -12,11 +14,20 @@ from .errors import ApiError
 from .redis_service import consume_rate_limit
 
 
+logger = logging.getLogger("offlineqr.access")
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         correlation_id = request.headers.get("x-correlation-id") or str(uuid4())
         request.state.correlation_id = correlation_id
+        started = perf_counter()
         response: Response = await call_next(request)
+        elapsed_ms = round((perf_counter() - started) * 1000, 1)
+        logger.info(
+            "request_completed",
+            extra={"correlation_id": correlation_id, "method": request.method, "path": request.url.path, "status": response.status_code, "duration_ms": elapsed_ms},
+        )
         response.headers["X-Correlation-Id"] = correlation_id
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
