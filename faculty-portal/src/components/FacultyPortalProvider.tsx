@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { csvCell } from "@/lib/csv";
+import { ApiRequestError } from "@/api";
 import {
   attest,
   cachedActiveSession,
@@ -101,6 +103,10 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
   const [loginPassword, setLoginPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Read through a ref so refreshActiveSession stays stable and the live-update
+  // socket is not torn down every time a page-level load toggles `loading`.
+  const loadingRef = useRef(false);
+  useEffect(() => { loadingRef.current = loading; }, [loading]);
   const [error, setError] = useState<string | null>(null);
   const [online, setOnline] = useState(true);
   const [projectorMode, setProjectorMode] = useState(false);
@@ -112,9 +118,7 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
   const [registerDateFilter, setRegisterDateFilter] = useState("all");
 
   const defaultRegisterOfferingId = useCallback((courseList = facultyCourses, classList = classes) => {
-    return courseList.find((item) => item.section_code === "CS21")?.course_offering_id ??
-      classList.find((item) => item.section_code === "CS21")?.course_offering_id ??
-      courseList[0]?.course_offering_id ??
+    return courseList[0]?.course_offering_id ?? classList[0]?.course_offering_id ??
       null;
   }, [classes, facultyCourses]);
 
@@ -155,9 +159,11 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
         setRegister(await fetchFacultyRegister(selected));
       }
 
-      const active = cachedActiveSession();
-      if (active) {
-        const updatedSession = await fetchSession(active.id);
+      const cached = cachedActiveSession();
+      const activeRecord = history.find((item) => item.state === "ACTIVE");
+      const activeSessionId = cached?.id ?? activeRecord?.id ?? null;
+      if (activeSessionId) {
+        const updatedSession = await fetchSession(activeSessionId);
         if (updatedSession) {
           setSession(updatedSession);
           setRoster(await fetchRoster(updatedSession.id));
@@ -166,6 +172,10 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
           setRoster([]);
           clearCachedActiveSession();
         }
+      } else {
+        setSession(null);
+        setRoster([]);
+        clearCachedActiveSession();
       }
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : "Unable to sync");
@@ -180,7 +190,7 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
   const submitFacultyLogin = useCallback(async () => {
     const email = loginEmail.trim().toLowerCase();
     if (!email || !loginPassword) {
-      setError("Enter your KIIT faculty email and password");
+      setError("Enter your Institution faculty email and password");
       return;
     }
     setLoginLoading(true);
@@ -188,6 +198,7 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     try {
       const identity = await loginFaculty(email, loginPassword);
       setFacultyIdentity(identity);
+      setLoginPassword("");
       localStorage.setItem("faculty.lastLogin", email);
       await refresh();
     } catch (exception) {
@@ -246,7 +257,7 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
   }, []);
 
   const refreshActiveSession = useCallback(async (sessionId: string | null) => {
-    if (!sessionId || loading) return;
+    if (!sessionId || loadingRef.current) return;
     try {
       const updatedSession = await fetchSession(sessionId);
       if (!updatedSession) {
@@ -260,7 +271,7 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     } catch {
       // Keep the active classroom view usable with the last local roster.
     }
-  }, [loading]);
+  }, []);
 
   const start = useCallback(async (courseOfferingId: string) => {
     setLoading(true);
@@ -273,7 +284,7 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
       setRoster(navigator.onLine ? await fetchRoster(nextSession.id) : cachedRoster(nextSession.id));
       return true;
     } catch (exception) {
-      if (navigator.onLine) {
+      if (navigator.onLine && (!(exception instanceof ApiRequestError) || exception.status >= 500)) {
         try {
           const offlineSession = startCachedOfflineSession(courseOfferingId);
           setSession(offlineSession);
@@ -349,7 +360,7 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
       student.percentage.toFixed(2),
     ]);
     const csv = [header, ...rows]
-      .map((row) => row.map((cell) => `"${cell.replaceAll("\"", "\"\"")}"`).join(","))
+      .map((row) => row.map(csvCell).join(","))
       .join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -383,7 +394,7 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     window.addEventListener("offline", setOnlineState);
 
     const savedFacultyLogin = localStorage.getItem("faculty.lastLogin");
-    if (savedFacultyLogin && savedFacultyLogin !== "dr.sarbeswar.mohanty@kiit.ac.in") {
+    if (savedFacultyLogin) {
       setLoginEmail(savedFacultyLogin);
     }
     const identity = cachedFacultyIdentity();

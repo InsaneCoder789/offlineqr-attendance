@@ -202,6 +202,13 @@ export async function loginFaculty(email: string, password: string): Promise<Fac
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
+  if (response.status === 429) {
+    const wait = Number(response.headers.get("Retry-After"));
+    throw new ApiRequestError(429, Number.isFinite(wait) && wait > 0
+      ? `Too many sign-in attempts. Try again in ${wait} seconds.`
+      : "Too many sign-in attempts. Try again shortly.");
+  }
+  if (response.status >= 500) throw new ApiRequestError(response.status, "The attendance service is unavailable. Try again shortly.");
   if (!response.ok) throw new Error("Unable to sign in with those credentials");
   const profile = (await response.json()) as FacultyIdentity;
   saveFacultyIdentity(profile);
