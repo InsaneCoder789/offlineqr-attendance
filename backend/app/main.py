@@ -152,7 +152,7 @@ def _require_development_identity() -> None:
         raise ApiError("DEV_IDENTITY_DISABLED", "Development identity is disabled.", 403)
 
 
-def _faculty_id_from_request(request: Request) -> UUID:
+def _faculty_id_from_request(request: Request, *, allow_password_change: bool = False) -> UUID:
     token = request.cookies.get("offlineqr_faculty_session", "")
     if token:
         session = faculty_session(token)
@@ -164,11 +164,13 @@ def _faculty_id_from_request(request: Request) -> UUID:
                 raise ApiError("CSRF_VALIDATION_FAILED", "Request could not be verified.", 403)
         faculty_id = UUID(session["faculty_id"])
         try:
-            faculty_profile(faculty_id)  # rejects deactivated accounts holding a live session
+            profile = faculty_profile(faculty_id)  # rejects deactivated accounts holding a live session
         except ApiError as exc:
             if exc.status_code == 404:
                 raise ApiError("FACULTY_SESSION_EXPIRED", "Faculty session has expired. Sign in again.", 401) from exc
             raise
+        if profile["must_change_password"] and not allow_password_change:
+            raise ApiError("FACULTY_PASSWORD_CHANGE_REQUIRED", "Change your temporary password before continuing.", 403)
         return faculty_id
     if get_settings().development_enabled and request.headers.get("x-faculty-id"):
         identity = request.headers["x-faculty-id"]
@@ -330,12 +332,12 @@ def faculty_logout(request: Request, response: Response) -> dict:
 
 @app.get("/api/v1/faculty/profile", response_model=FacultyLoginOut)
 def faculty_current_profile(request: Request) -> dict:
-    return faculty_profile(_faculty_id_from_request(request))
+    return faculty_profile(_faculty_id_from_request(request, allow_password_change=True))
 
 
 @app.patch("/api/v1/faculty/profile", response_model=FacultyLoginOut)
 def faculty_update_profile(payload: FacultyProfileUpdateIn, request: Request) -> dict:
-    return update_faculty_profile(_faculty_id_from_request(request), payload.display_name, payload.phone_number)
+    return update_faculty_profile(_faculty_id_from_request(request, allow_password_change=True), payload.display_name, payload.phone_number)
 
 
 @app.post("/api/v1/faculty/auth/password")
@@ -344,7 +346,7 @@ def faculty_change_password(
     request: Request,
     response: Response,
 ) -> dict:
-    change_faculty_password(_faculty_id_from_request(request), payload.current_password, payload.new_password)
+    change_faculty_password(_faculty_id_from_request(request, allow_password_change=True), payload.current_password, payload.new_password)
     response.delete_cookie("offlineqr_faculty_session", path="/")
     response.delete_cookie("offlineqr_faculty_csrf", path="/")
     return {"result": "password_changed"}

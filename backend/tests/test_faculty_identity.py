@@ -38,19 +38,28 @@ class FacultyIdentityApiTest(unittest.TestCase):
         response = self.client.post(
             "/api/v1/faculty/auth/login",
             json={
-                "email": "ananya.sen@kiit.ac.in",
+                "email": "ananya.sen@example.edu",
                 "password": DEV_PASSWORD,
             },
         )
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
 
+    def test_temporary_password_blocks_operational_routes_until_changed(self) -> None:
+        with psycopg.connect(get_settings().database_url) as conn:
+            conn.execute("UPDATE faculty_credentials SET must_change_password=true WHERE faculty_id=%s", [DEV_FACULTY_ID])
+        self._login()
+        blocked = self.client.get("/api/v1/faculty/courses")
+        self.assertEqual(blocked.status_code, 403, blocked.text)
+        self.assertEqual(blocked.json()["error"]["code"], "FACULTY_PASSWORD_CHANGE_REQUIRED")
+        self.assertEqual(self.client.get("/api/v1/faculty/profile").status_code, 200)
+
     def test_login_uses_http_only_session_and_server_profile(self) -> None:
         profile = self._login()
 
-        self.assertEqual(profile["institutional_email"], "ananya.sen@kiit.ac.in")
-        self.assertIn("kiit_faculty_session", self.client.cookies)
-        self.assertIn("kiit_faculty_csrf", self.client.cookies)
+        self.assertEqual(profile["institutional_email"], "ananya.sen@example.edu")
+        self.assertIn("offlineqr_faculty_session", self.client.cookies)
+        self.assertIn("offlineqr_faculty_csrf", self.client.cookies)
         restored = self.client.get("/api/v1/faculty/profile")
         self.assertEqual(restored.status_code, 200, restored.text)
         self.assertEqual(restored.json()["id"], profile["id"])
@@ -66,7 +75,7 @@ class FacultyIdentityApiTest(unittest.TestCase):
 
         accepted = self.client.patch(
             "/api/v1/faculty/profile",
-            headers={"x-csrf-token": self.client.cookies.get("kiit_faculty_csrf")},
+            headers={"x-csrf-token": self.client.cookies.get("offlineqr_faculty_csrf")},
             json={"display_name": "Dr. Ananya Sen", "phone_number": "+919876543210"},
         )
         self.assertEqual(accepted.status_code, 200, accepted.text)
@@ -75,11 +84,11 @@ class FacultyIdentityApiTest(unittest.TestCase):
     def test_invalid_password_does_not_issue_faculty_session(self) -> None:
         response = self.client.post(
             "/api/v1/faculty/auth/login",
-            json={"email": "ananya.sen@kiit.ac.in", "password": "wrong"},
+            json={"email": "ananya.sen@example.edu", "password": "wrong"},
         )
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["error"]["code"], "INVALID_CREDENTIALS")
-        self.assertNotIn("kiit_faculty_session", self.client.cookies)
+        self.assertNotIn("offlineqr_faculty_session", self.client.cookies)
 
     def test_authenticated_faculty_receives_redis_backed_session_events(self) -> None:
         self._login()
@@ -87,7 +96,7 @@ class FacultyIdentityApiTest(unittest.TestCase):
         self.assertEqual(courses.status_code, 200, courses.text)
         started = self.client.post(
             "/api/v1/faculty/attendance-sessions/start",
-            headers={"x-csrf-token": self.client.cookies.get("kiit_faculty_csrf")},
+            headers={"x-csrf-token": self.client.cookies.get("offlineqr_faculty_csrf")},
             json={"course_offering_id": courses.json()[0]["course_offering_id"]},
         )
         self.assertEqual(started.status_code, 200, started.text)
@@ -104,20 +113,20 @@ class FacultyIdentityApiTest(unittest.TestCase):
         self._login()
         second_login = second_client.post(
             "/api/v1/faculty/auth/login",
-            json={"email": "ananya.sen@kiit.ac.in", "password": DEV_PASSWORD},
+            json={"email": "ananya.sen@example.edu", "password": DEV_PASSWORD},
         )
         self.assertEqual(second_login.status_code, 200, second_login.text)
 
         changed = self.client.post(
             "/api/v1/faculty/auth/password",
-            headers={"x-csrf-token": self.client.cookies.get("kiit_faculty_csrf")},
+            headers={"x-csrf-token": self.client.cookies.get("offlineqr_faculty_csrf")},
             json={
                 "current_password": DEV_PASSWORD,
                 "new_password": "Faculty-Secure-2026!",
             },
         )
         self.assertEqual(changed.status_code, 200, changed.text)
-        self.assertNotIn("kiit_faculty_session", self.client.cookies)
+        self.assertNotIn("offlineqr_faculty_session", self.client.cookies)
 
         revoked = second_client.get("/api/v1/faculty/profile")
         self.assertEqual(revoked.status_code, 401)
