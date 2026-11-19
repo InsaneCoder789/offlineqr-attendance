@@ -39,6 +39,10 @@ from .presence_protocol import (
 )
 
 
+def _institution_timezone() -> str:
+    return get_settings().institution_timezone
+
+
 def _connect():
     return connect()
 
@@ -420,8 +424,8 @@ def faculty_session_history(faculty_id: UUID, limit: int = 50) -> list[dict]:
             JOIN sections sec ON sec.id = co.section_id
             LEFT JOIN timetable_entries te
               ON te.course_offering_id = sess.course_offering_id
-             AND te.day_of_week = EXTRACT(ISODOW FROM sess.scheduled_start)::int
-             AND te.start_time = sess.scheduled_start::time
+             AND te.day_of_week = EXTRACT(ISODOW FROM sess.scheduled_start AT TIME ZONE %s)::int
+             AND te.start_time = (sess.scheduled_start AT TIME ZONE %s)::time
              AND te.active = true
             LEFT JOIN attendance_session_roster r ON r.attendance_session_id = sess.id
             LEFT JOIN attendance_records ar ON ar.attendance_session_id = sess.id
@@ -429,7 +433,7 @@ def faculty_session_history(faculty_id: UUID, limit: int = 50) -> list[dict]:
             ORDER BY sess.scheduled_start DESC
             LIMIT %s
             """,
-            [faculty_id, bounded_limit],
+            [faculty_id, _institution_timezone(), _institution_timezone(), bounded_limit],
         ).fetchall()
         return [dict(row) for row in rows]
 
@@ -1260,10 +1264,12 @@ def _session_by_id(conn, session_id: UUID) -> dict:
         JOIN sections sec ON sec.id = co.section_id
         LEFT JOIN timetable_entries te
           ON te.course_offering_id = sess.course_offering_id
-         AND te.day_of_week = EXTRACT(ISODOW FROM sess.scheduled_start)::int
+         AND te.day_of_week = EXTRACT(ISODOW FROM sess.scheduled_start AT TIME ZONE %s)::int
+         AND te.start_time = (sess.scheduled_start AT TIME ZONE %s)::time
+         AND te.active = true
         WHERE sess.id = %s
         """,
-        [session_id],
+        [_institution_timezone(), _institution_timezone(), session_id],
     ).fetchone()
     if row is None:
         raise ApiError("SESSION_NOT_FOUND", "Attendance session was not found.", 404)
