@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { csvCell } from "@/lib/csv";
+import { downloadRegisterCsv } from "@/lib/register-export";
+import { useSessionEvents } from "@/hooks/useSessionEvents";
 import { ApiRequestError } from "@/api";
 import {
   attest,
@@ -340,35 +341,7 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
   }, [attestationReason, confirmStudent, session]);
 
   const exportRegisterCsv = useCallback(() => {
-    if (!register) return;
-    const normalizedQuery = registerQuery.trim().toLowerCase();
-    const sessions = registerDateFilter === "all"
-      ? register.sessions
-      : register.sessions.filter((item) => item.id === registerDateFilter);
-    const students = register.students.filter((student) =>
-      !normalizedQuery ||
-      student.roll_number.toLowerCase().includes(normalizedQuery) ||
-      student.display_name.toLowerCase().includes(normalizedQuery)
-    );
-    const header = ["Roll Number", "Student", ...sessions.map((item) => item.label), "Present", "Absent", "Percentage"];
-    const rows = students.map((student) => [
-      student.roll_number,
-      student.display_name,
-      ...sessions.map((item) => student.statuses[item.id] ?? ""),
-      String(student.present),
-      String(student.absent),
-      student.percentage.toFixed(2),
-    ]);
-    const csv = [header, ...rows]
-      .map((row) => row.map(csvCell).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${register.course_code}_${register.section_code}_attendance_register.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    if (register) downloadRegisterCsv(register, registerQuery, registerDateFilter);
   }, [register, registerDateFilter, registerQuery]);
 
   useEffect(() => {
@@ -430,39 +403,12 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     };
   }, []);
 
-  useEffect(() => {
-    const sessionId = session && !session.closed_at ? session.id : null;
-    if (!sessionId || !online || !facultyIdentity) return;
-    let socket: WebSocket | null = null;
-    let fallbackTimer: number | null = null;
-    let reconnectTimer: number | null = null;
-    let disposed = false;
-
-    const beginFallback = () => {
-      if (fallbackTimer === null) fallbackTimer = window.setInterval(() => void refreshActiveSession(sessionId), 5000);
-    };
-    const connect = () => {
-      if (disposed) return;
-      socket = new WebSocket(facultySessionEventUrl(sessionId));
-      socket.onopen = () => {
-        if (fallbackTimer !== null) { window.clearInterval(fallbackTimer); fallbackTimer = null; }
-      };
-      socket.onmessage = () => void refreshActiveSession(sessionId);
-      socket.onerror = () => socket?.close();
-      socket.onclose = () => {
-        if (disposed) return;
-        beginFallback();
-        reconnectTimer = window.setTimeout(connect, 4000);
-      };
-    };
-    connect();
-    return () => {
-      disposed = true;
-      socket?.close();
-      if (fallbackTimer !== null) window.clearInterval(fallbackTimer);
-      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
-    };
-  }, [facultyIdentity, facultySessionEventUrl, online, refreshActiveSession, session?.closed_at, session?.id]);
+  useSessionEvents(
+    session && !session.closed_at ? session.id : null,
+    online && facultyIdentity !== null,
+    facultySessionEventUrl,
+    refreshActiveSession,
+  );
 
   const value = useMemo<FacultyPortalState>(() => ({
     classes,
