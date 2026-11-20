@@ -227,7 +227,8 @@ export async function loginFaculty(email: string, password: string): Promise<Fac
 }
 
 export async function logoutFaculty(): Promise<void> {
-  await apiFetch("/api/v1/faculty/auth/logout", { method: "POST" });
+  const response = await apiFetch("/api/v1/faculty/auth/logout", { method: "POST" });
+  if (!response.ok && response.status !== 401) await throwApiError(response, "Could not sign out");
   clearFacultyIdentity();
 }
 

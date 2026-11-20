@@ -82,5 +82,5 @@ export function titleFor(pathname: string): string {
   if (pathname.startsWith("/attendance")) return "Live Attendance";
   if (pathname.startsWith("/records")) return "Attendance Records";
   if (pathname.startsWith("/settings")) return "Settings";
-  return "Today";
+  return "Preview";
 }

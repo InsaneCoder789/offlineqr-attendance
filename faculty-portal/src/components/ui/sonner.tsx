@@ -5,11 +5,14 @@ import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
+  const { resolvedTheme } = useTheme()
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={resolvedTheme === "dark" ? "dark" : "light"}
+      closeButton
+      offset={{ top: "5.25rem", right: "1.25rem" }}
+      mobileOffset={{ top: "calc(5rem + env(safe-area-inset-top))", left: "1rem", right: "1rem" }}
       className="toaster group"
       icons={{
         success: (
@@ -25,7 +28,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           <OctagonXIcon className="size-4" />
         ),
         loading: (
-          <Loader2Icon className="size-4 animate-spin" />
+          <Loader2Icon className="size-4 motion-safe:animate-spin" />
         ),
       }}
       style={
@@ -33,12 +36,13 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-bg": "var(--popover)",
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
-          "--border-radius": "var(--radius)",
+          "--border-radius": "1rem",
         } as React.CSSProperties
       }
       toastOptions={{
         classNames: {
-          toast: "cn-toast",
+          toast: "cn-toast !min-h-14 !gap-2 !border-border !py-2 !shadow-lg",
+          closeButton: "!static !order-last !ml-auto !size-8 !shrink-0 !transform-none !rounded-lg !border-border !bg-popover !text-popover-foreground hover:!bg-muted focus-visible:!outline-2 focus-visible:!outline-ring",
         },
       }}
       {...props}

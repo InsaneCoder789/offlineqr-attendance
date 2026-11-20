@@ -1,16 +1,72 @@
-.scene{position:absolute;inset:0;pointer-events:none}
-.plate{position:absolute;left:50%;top:60px;transform:translateX(-50%);width:90%;max-width:1440px;aspect-ratio:1505/1045}
-.plate img{object-fit:fill}
-.plate{mask-image:linear-gradient(to right,transparent,#000 5%,#000 95%,transparent),linear-gradient(to bottom,transparent,#000 16%,#000 82%,transparent);mask-composite:intersect}
-.screenLayer,.phoneWindow,.laptopWindow{position:absolute;inset:0}
-.screenLayer{opacity:0;transition:opacity 340ms cubic-bezier(.22,1,.36,1)}
-.active{opacity:1}
-/* Only screen interiors change. Every hardware/background pixel comes from the master. */
-.phoneWindow{clip-path:polygon(13.69% 29.28%,26.31% 30.81%,31.10% 75.12%,16.74% 75.79%)}
-.laptopWindow{clip-path:polygon(49.50% 30.34%,92.95% 26.22%,92.36% 70.05%,47.64% 68.99%)}
-@media(min-width:1700px){.plate{top:70px}}
-@media(max-height:820px) and (min-width:701px){.plate{max-width:1100px;top:65px}}
-@media(max-width:700px){.plate{width:108%;top:calc(50% - 55px);max-width:none}}
-@media(min-width:701px) and (max-width:1000px){.plate{top:calc(50% - 200px)}}
-@media(min-width:701px) and (max-width:1000px) and (max-height:500px){.plate{left:70%;width:60%;top:25px}}
-@media(prefers-reduced-motion:reduce){.screenLayer{transition:none}}
+.scene {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2;
+  overflow: hidden;
+  container-type: inline-size;
+  background: #c8d1bf;
+  color: #173224;
+  pointer-events: none;
+}
+.scene > img { object-fit: fill; }
+.phone, .laptop {
+  position: absolute;
+  overflow: hidden;
+  background: #f7f9f4;
+}
+.phone {
+  left: 14.42%;
+  top: 33.5%;
+  width: 12.13%;
+  height: 51.4%;
+  border-radius: 0 0 2cqw 2cqw;
+  text-align: center;
+}
+.phoneContent {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: .65cqw;
+  height: 100%;
+  padding: .45cqw;
+  font-size: 1.35cqw;
+  line-height: 1.1;
+}
+.wordmark { font-size: 1.15cqw; align-self: start; }
+.phoneIcon {
+  display: grid;
+  place-items: center;
+  width: 3.65cqw;
+  height: 3.65cqw;
+  border-radius: 50%;
+  background: #e1ede2;
+  color: #245a40;
+}
+.phoneIcon svg { width: 2cqw; height: 2cqw; }
+.phoneContent small { color: #496457; font-size: .9cqw; }
+.phoneContent > span { padding: .48cqw .42cqw; border-radius: .45cqw; background: #245a40; color: #fff; font-size: .82cqw; }
+.laptop {
+  left: 35.92%;
+  top: 17.6%;
+  width: 49.16%;
+  height: 57%;
+  font-size: 1.2cqw;
+}
+.portalHeader { display: flex; align-items: center; justify-content: space-between; padding: .6cqw 1.2cqw; background: #1b3d2c; color: #fff; }
+.portalHeader span { font-size: .95cqw; }
+.portalMain { display: grid; gap: 1.1cqw; padding: 1.15cqw; }
+.portalHeading { display: flex; align-items: center; justify-content: space-between; gap: .75cqw; }
+.portalHeading > div { display: grid; }
+.portalHeading strong { font-size: 1.85cqw; }
+.portalHeading small { color: #496457; font-size: .95cqw; }
+.portalHeading > span { display: inline-flex; align-items: center; gap: .38cqw; padding: .25cqw .7cqw; border-radius: 6cqw; background: #e2eee2; font-size: 1.08cqw; }
+.portalHeading svg { width: 1.2cqw; height: 1.2cqw; }
+.portalGrid { display: grid; grid-template-columns: 1fr 1.45fr; gap: .8cqw; }
+.qrCard, .roster { border: 1px solid #dbe4da; border-radius: .55cqw; background: white; padding: .8cqw; }
+.qrCard { display: grid; justify-items: center; align-content: center; gap: .4cqw; font-size: 1.05cqw; }
+.qrCard svg { width: 6.3cqw; height: 6.3cqw; }
+.roster > div { display: flex; justify-content: space-between; gap: .25cqw; border-top: 1px solid #e4ebe2; padding: .42cqw 0; font-size: 1.02cqw; }
+.roster > div > span:last-child { color: #315a43; }
+.phoneContent, .portalMain { animation: screen-in 240ms ease both; }
+@keyframes screen-in { from { opacity: .45; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .phoneContent, .portalMain { animation: none; } }

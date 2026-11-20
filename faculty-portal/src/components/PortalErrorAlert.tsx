@@ -27,7 +27,7 @@ export function PortalErrorAlert({
   const view = presentation[kind ?? "generic"];
   const Icon = view.icon;
   return (
-    <Alert role={kind === "offline" ? "status" : "alert"} variant={kind === "offline" ? "default" : "destructive"}>
+    <Alert role={kind === "offline" ? "status" : "alert"} variant={kind === "offline" ? "warning" : "destructive"}>
       <Icon />
       <AlertTitle>{title ?? view.title}</AlertTitle>
       <AlertDescription>

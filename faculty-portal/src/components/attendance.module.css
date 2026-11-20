@@ -1,0 +1,104 @@
+.room { min-width: 0; container-type: inline-size; }
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: end;
+  gap: 1.5rem;
+  padding: clamp(.75rem, 2vw, 1.75rem) 0 1.5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.5rem;
+}
+.masthead h2 {
+  font-size: clamp(2rem, 4vw, 4rem);
+  font-weight: 650;
+  line-height: 1.05;
+  letter-spacing: -.055em;
+  overflow-wrap: anywhere;
+  margin: .5rem 0;
+}
+.kicker { font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--primary); }
+.meta, .tally p { color: var(--muted-foreground); font-size: .875rem; }
+.tally { min-width: min(100%, 10rem); font-variant-numeric: tabular-nums; }
+.tally strong { font-size: 2rem; line-height: 1.15; }
+.tally strong span { color: var(--muted-foreground); font-size: 1rem; }
+.tally progress { display: block; width: 100%; height: .45rem; margin-top: .55rem; appearance: none; overflow: hidden; border-radius: 999px; background: var(--border); }
+.tally progress::-webkit-progress-bar { background: var(--border); }
+.tally progress::-webkit-progress-value { background: var(--primary); }
+.tally progress::-moz-progress-bar { background: var(--primary); }
+.workspace { display: grid; align-items: start; gap: clamp(1rem, 2vw, 2rem); }
+.register { min-width: 0; }
+.register .rosterTools { display: grid; justify-items: start; gap: .65rem; }
+.rosterTools > label { width: min(100%, 22rem); }
+.scan {
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+  background: color-mix(in srgb, var(--primary) 7%, var(--card));
+  border-radius: 1rem;
+  padding: clamp(1rem, 2vw, 1.5rem);
+}
+.scan h3 { font-size: 1.25rem; font-weight: 650; letter-spacing: -.03em; }
+.canvasFrame {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  display: grid;
+  align-items: center;
+  margin-inline: auto;
+  width: min(100%, 19rem);
+  aspect-ratio: 1;
+  background: white;
+  color: #17221c;
+  border-radius: .7rem;
+  padding: clamp(.5rem, 2vw, 1rem);
+}
+.canvasFrame p { position: absolute; inset: 0; z-index: 1; align-content: center; text-align: center; padding: 1rem; font-size: .875rem; }
+.controls { display: flex; flex-wrap: wrap; gap: .65rem; }
+.controls > button { flex: 1 1 auto; }
+@container (min-width: 49rem) {
+  .workspace { grid-template-columns: minmax(17rem, 23rem) minmax(0, 1fr); }
+}
+
+.projector {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(.65rem, 2dvh, 1.5rem);
+  padding: clamp(.75rem, 2vw, 2rem);
+  color-scheme: light;
+  background: #fff;
+  color: #15251d;
+}
+.projectorHead {
+  width: 100%;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: .75rem;
+}
+.projectorHead h1 {
+  font-size: clamp(1.25rem, 3vw, 2.6rem);
+  font-weight: 650;
+  letter-spacing: -.04em;
+  overflow-wrap: anywhere;
+}
+.projectorHead .kicker { color: #286044; }
+.projectorHead button { color: #15251d; border-color: #a8b8ae; background: #f5f8f6; }
+.projectorHead button:hover { background: #e8f0eb; }
+.projectorCode {
+  width: min(100%, 38rem, 66dvh);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: clamp(.35rem, 1vw, .8rem);
+  border: 1px solid #d1dcd4;
+  border-radius: .75rem;
+  text-align: center;
+}
+.projectorCode > * { grid-area: 1 / 1; }
+.projectorCaption { display: flex; align-items: center; gap: .75rem; font-size: .875rem; }
+.projectorCaption [role="timer"] { --o-hair: #d1dcd4; --primary: #287243; }

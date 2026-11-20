@@ -39,6 +39,7 @@ import {
   facultySessionEventUrl,
   loginFaculty,
   logoutFaculty,
+  pendingSessionCloses,
   prepareOfflineSessions,
   queueOfflineSessionClose,
   reconcileOfflineSessions,
@@ -64,6 +65,7 @@ type PortalDataState = {
   session: FacultySession | null;
   roster: RosterStudent[];
   facultyIdentity: FacultyIdentity | null;
+  authReady: boolean;
   loginLoading: boolean;
   loading: boolean;
   error: string | null;
@@ -118,11 +120,13 @@ function FacultyPortalDataProvider({ children }: { children: React.ReactNode }) 
   const [session, setSession] = useState<FacultySession | null>(null);
   const [roster, setRoster] = useState<RosterStudent[]>([]);
   const [facultyIdentity, setFacultyIdentity] = useState<FacultyIdentity | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   // Read through a ref so refreshActiveSession stays stable and the live-update
   // socket is not torn down every time a page-level load toggles `loading`.
   const loadingRef = useRef(false);
+  const startingRef = useRef(false);
   useEffect(() => { loadingRef.current = loading; }, [loading]);
   const [portalError, setPortalError] = useState<PortalError | null>(null);
   const [passwordChangeFlag, setPasswordChangeFlag] = useState(false);
@@ -260,14 +264,19 @@ function FacultyPortalDataProvider({ children }: { children: React.ReactNode }) 
   }, [refresh, setError, ui]);
 
   const switchFaculty = useCallback(async () => {
+    if (pendingSessionCloses().length || cachedActiveSession()?.offline_pending_activation) {
+      setError("Attendance changes are still saved on this device. Reconnect and let them reconcile before signing out.");
+      return;
+    }
     try {
       await logoutFaculty();
-    } catch {
-      clearFacultyIdentity();
+    } catch (exception) {
+      reportFailure(exception, "Could not sign out");
+      return;
     }
     resetWorkspace();
     setError(null);
-  }, [resetWorkspace, setError]);
+  }, [reportFailure, resetWorkspace, setError]);
 
   const updateProfile = useCallback(async (displayName: string, phoneNumber: string | null) => {
     setLoading(true);
@@ -317,48 +326,68 @@ function FacultyPortalDataProvider({ children }: { children: React.ReactNode }) 
   }, [reportFailure]);
 
   const start = useCallback(async (courseOfferingId: string) => {
+    if (startingRef.current) return false;
+    if (session && !session.closed_at) return session.course_offering_id === courseOfferingId;
+
+    startingRef.current = true;
     setLoading(true);
     setError(null);
     try {
-      const nextSession = navigator.onLine
-        ? await startSession(courseOfferingId)
-        : startCachedOfflineSession(courseOfferingId);
-      setSession(nextSession);
-      setRoster(navigator.onLine ? await fetchRoster(nextSession.id) : cachedRoster(nextSession.id));
-      return true;
-    } catch (exception) {
-      if (navigator.onLine && (!(exception instanceof ApiRequestError) || exception.status >= 500)) {
+      let nextSession: FacultySession;
+      try {
+        nextSession = navigator.onLine
+          ? await startSession(courseOfferingId)
+          : startCachedOfflineSession(courseOfferingId);
+      } catch (exception) {
+        if (!navigator.onLine || (exception instanceof ApiRequestError && exception.status < 500)) {
+          reportFailure(exception, "Session unavailable");
+          return false;
+        }
         try {
-          const offlineSession = startCachedOfflineSession(courseOfferingId);
-          setSession(offlineSession);
-          setRoster(cachedRoster(offlineSession.id));
+          nextSession = startCachedOfflineSession(courseOfferingId);
           setOnline(false);
-          return true;
         } catch {
-          // Surface the original server error when no prepared session exists.
+          reportFailure(exception, "Session unavailable");
+          return false;
         }
       }
-      reportFailure(exception, "Session unavailable");
-      return false;
+
+      setSession(nextSession);
+      setRoster(cachedRoster(nextSession.id));
+      if (!nextSession.offline_pending_activation && navigator.onLine) {
+        try {
+          setRoster(await fetchRoster(nextSession.id));
+        } catch (exception) {
+          reportFailure(exception, "Attendance opened, but the roster could not be loaded.");
+        }
+      }
+      return true;
     } finally {
+      startingRef.current = false;
       setLoading(false);
     }
-  }, [reportFailure, setError]);
+  }, [reportFailure, session, setError]);
 
   const endSession = useCallback(async () => {
     if (!session) return;
     setLoading(true);
     setError(null);
     try {
-      if (!navigator.onLine || session.offline_pending_activation) {
+      const queued = !navigator.onLine || session.offline_pending_activation;
+      if (queued) {
         queueOfflineSessionClose(session);
       } else {
         await closeSession(session.id);
-        setSessionHistory(await fetchSessionHistory());
       }
-      setSession(null);
-      setRoster([]);
+      setSession({ ...session, closed_at: new Date().toISOString(), state: "CLOSED", offline_pending_activation: queued });
       ui.setProjectorMode(false);
+      if (!queued) {
+        try {
+          setSessionHistory(await fetchSessionHistory());
+        } catch (exception) {
+          reportFailure(exception, "Attendance ended, but session history could not be refreshed.");
+        }
+      }
     } catch (exception) {
       reportFailure(exception, "Could not close attendance session");
     } finally {
@@ -416,6 +445,7 @@ function FacultyPortalDataProvider({ children }: { children: React.ReactNode }) 
     }
     const identity = cachedFacultyIdentity();
     setFacultyIdentity(identity);
+    if (identity) setAuthReady(true);
     setClasses(cachedTodayClasses());
     const courses = cachedFacultyCourses();
     setFacultyCourses(courses);
@@ -441,6 +471,8 @@ function FacultyPortalDataProvider({ children }: { children: React.ReactNode }) 
         if (!verified.must_change_password) await refresh();
       } catch {
         // Offline faculty access may display only cached workspace data.
+      } finally {
+        setAuthReady(true);
       }
     })();
 
@@ -459,13 +491,13 @@ function FacultyPortalDataProvider({ children }: { children: React.ReactNode }) 
 
   const value = useMemo<PortalDataState>(() => ({
     classes, facultyCourses, sessionHistory, selectedRegisterOfferingId, register, session, roster,
-    facultyIdentity, loginLoading, loading, error, errorKind,
+    facultyIdentity, authReady, loginLoading, loading, error, errorKind,
     passwordChangeRequired: passwordChangeFlag || Boolean(facultyIdentity?.must_change_password),
     online, submitFacultyLogin, switchFaculty, updateProfile, changePassword, refresh, refreshRegister,
     start, endSession, confirmAttestation, exportRegisterCsv, clearError,
   }), [
     classes, facultyCourses, sessionHistory, selectedRegisterOfferingId, register, session, roster,
-    facultyIdentity, loginLoading, loading, error, errorKind, passwordChangeFlag, online,
+    facultyIdentity, authReady, loginLoading, loading, error, errorKind, passwordChangeFlag, online,
     submitFacultyLogin, switchFaculty, updateProfile, changePassword, refresh, refreshRegister,
     start, endSession, confirmAttestation, exportRegisterCsv, clearError,
   ]);

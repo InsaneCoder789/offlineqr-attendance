@@ -1,13 +1,4 @@
-"use client";
-
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { LoginPage } from "@/components/LoginPage";
-import { usePortalData } from "@/components/FacultyPortalProvider";
-
+/** The workspace shell handles authentication and renders the sign-in form. */
 export default function Login() {
-  const { facultyIdentity } = usePortalData();
-  const router = useRouter();
-  useEffect(() => { if (facultyIdentity) router.replace("/dashboard"); }, [facultyIdentity, router]);
-  return facultyIdentity ? null : <LoginPage />;
+  return null;
 }

@@ -1,15 +1,8 @@
 export const chapters = [
-  { title: "A class begins. Everyone connects.", text: "Faculty open an assigned class on the web. A signed classroom QR changes every five seconds. Students open the scanner inside their app.", label: "The classroom", phone: "Today's class", laptop: "Attendance active" },
-  { title: "One scan. A signed record.", text: "The registered phone signs the scan for its student. Enrollment, QR expiry and duplicate checks govern acceptance. A device binding is a credential, not a proof of physical proximity.", label: "The scan", phone: "Scan saved", laptop: "Awaiting proof" },
-  { title: "The network stops. The record stays.", text: "A durable local outbox keeps the signed proof on the phone. Saved locally does not mean accepted by the server. Retry begins when the service becomes reachable.", label: "Offline continuity", phone: "Waiting to sync", laptop: "Class continues" },
-  { title: "Back online. Back in the register.", text: "The server verifies pending proofs and updates the faculty roster. Valid captures can reconcile after session closure within the allowed deadline; rejected proofs remain visible for review.", label: "Reconciliation", phone: "Server accepted", laptop: "Roster updated" },
-] as const;
-
-export const mobileChapterText = [
-  "Faculty open a class. Students scan its signed QR, which rotates every five seconds.",
-  "The registered phone signs the scan. Enrollment, expiry and duplicate checks determine server acceptance, not physical proximity.",
-  "The signed proof stays on the phone. It retries when reachable; locally saved is not yet server accepted.",
-  "The server verifies queued proofs and updates the roster. Eligible captures can sync after closure; rejections remain visible.",
+  { title: "Open the classroom QR.", text: "Faculty select an assigned class and display the signed QR. The code rotates every five seconds.", label: "Classroom" },
+  { title: "Scan from the student app.", text: "The registered phone signs a proof for this student and session. The app shows the result of the capture.", label: "Scan" },
+  { title: "Keep the scan when Wi-Fi drops.", text: "The phone saves the proof locally and retries when it reaches the service. The app shows it as pending until verification.", label: "Offline" },
+  { title: "Update the faculty register.", text: "When the connection returns, the server verifies the proof and updates the roster. Rejected proofs remain visible for review.", label: "Verify" },
 ] as const;
 
 export function chapterAt(progress: number) {

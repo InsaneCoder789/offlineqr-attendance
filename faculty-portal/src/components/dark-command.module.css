@@ -1,0 +1,89 @@
+/* Local dark command-centre styling for login, 404, settings and admin.
+   Uses semantic tokens; `.ink` re-scopes them to the ink-black palette for full-bleed pages. */
+.ink {
+  --background: #070b09;
+  --foreground: #eef6f0;
+  --card: #111915;
+  --card-foreground: #eef6f0;
+  --popover: #18221d;
+  --popover-foreground: #eef6f0;
+  --primary: #2bd96b;
+  --primary-foreground: #04150b;
+  --secondary: #18221d;
+  --secondary-foreground: #eef6f0;
+  --muted: #18221d;
+  --muted-foreground: #9db0a3;
+  --accent: #1c2b23;
+  --accent-foreground: #eef6f0;
+  --destructive: #ff6b6b;
+  --border: rgb(255 255 255 / 0.12);
+  --input: rgb(255 255 255 / 0.18);
+  --ring: #2bd96b;
+  --success: #2bd96b;
+  --warning: #f5b84a;
+  background: var(--background);
+  color: var(--foreground);
+  color-scheme: dark;
+}
+
+.glass {
+  border: 1px solid color-mix(in oklab, var(--foreground) 11%, transparent);
+  background:
+    linear-gradient(155deg, color-mix(in oklab, var(--foreground) 6%, transparent), transparent 55%),
+    color-mix(in oklab, var(--card) 88%, transparent);
+  box-shadow: 0 30px 80px -50px color-mix(in oklab, var(--primary) 55%, transparent), inset 0 1px 0 color-mix(in oklab, var(--foreground) 6%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.glassDanger {
+  border: 1px solid color-mix(in oklab, var(--destructive) 38%, transparent);
+  background: linear-gradient(155deg, color-mix(in oklab, var(--destructive) 9%, transparent), transparent 60%), color-mix(in oklab, var(--card) 90%, transparent);
+}
+
+.glowText { color: var(--primary); text-shadow: 0 0 28px color-mix(in oklab, var(--primary) 55%, transparent); }
+.glowWarn { color: var(--warning); text-shadow: 0 0 28px color-mix(in oklab, var(--warning) 45%, transparent); }
+.glowRed { color: var(--destructive); text-shadow: 0 0 28px color-mix(in oklab, var(--destructive) 45%, transparent); }
+.numeral { font-variant-numeric: tabular-nums; letter-spacing: -0.04em; font-weight: 800; line-height: 1; }
+
+.focusRing:focus-visible, .glass a:focus-visible, .glass button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px color-mix(in oklab, var(--primary) 28%, transparent);
+}
+
+.radial {
+  background:
+    radial-gradient(60% 50% at 20% 15%, color-mix(in oklab, var(--primary) 26%, transparent), transparent 70%),
+    radial-gradient(45% 40% at 85% 90%, color-mix(in oklab, var(--primary) 14%, transparent), transparent 70%),
+    var(--background);
+}
+
+.gridlines {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--foreground) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--foreground) 5%, transparent) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(70% 70% at 50% 40%, #000, transparent);
+}
+
+/* QR motif */
+.qrCell { fill: var(--primary); opacity: 0.16; animation: cellPulse 5s steps(1, end) infinite; }
+.qrCellGlitch { animation: cellGlitch 3.6s steps(1, end) infinite; }
+.qrFinder { fill: none; stroke: var(--primary); stroke-width: 1.4; }
+.qrFinderDot { fill: var(--primary); }
+.qrSweep { fill: color-mix(in oklab, var(--primary) 70%, white); opacity: 0.5; animation: sweep 5s linear infinite; }
+.qrHalo { animation: halo 5s ease-in-out infinite; transform-origin: center; }
+@keyframes cellPulse { 0% { opacity: 0.18 } 20% { opacity: 0.85 } 45% { opacity: 0.3 } 70% { opacity: 0.7 } 100% { opacity: 0.18 } }
+@keyframes cellGlitch { 0%, 100% { opacity: 0.2; transform: translateX(0) } 12% { opacity: 0.9; transform: translateX(1.5px) } 14% { opacity: 0.1; transform: translateX(-1px) } 55% { opacity: 0.6 } 57% { opacity: 0.15; transform: translateX(0) } }
+@keyframes sweep { 0% { transform: translateY(-2px); opacity: 0 } 15% { opacity: 0.55 } 85% { opacity: 0.55 } 100% { transform: translateY(112px); opacity: 0 } }
+@keyframes halo { 0%, 100% { opacity: 0.55; transform: scale(0.98) } 50% { opacity: 1; transform: scale(1.03) } }
+.rise { animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+.celebrate { animation: celebrate 2.4s ease-in-out infinite; }
+@keyframes celebrate { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 40%, transparent) } 50% { box-shadow: 0 0 0 18px transparent } }
+
+@media (prefers-reduced-motion: reduce) {
+  .qrCell, .qrCellGlitch, .qrSweep, .qrHalo, .rise, .celebrate { animation: none !important; }
+  .qrCell { opacity: 0.5; }
+  .qrSweep { display: none; }
+}
