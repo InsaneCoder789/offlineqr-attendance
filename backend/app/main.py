@@ -112,7 +112,7 @@ from .repositories import (
 from .redis_service import assert_available, faculty_session, publish_session_event, revoke_faculty_session, session_event_version, student_session
 from .redis_service import create_faculty_session, create_student_session
 from .oidc_service import verify_oidc_identity
-from .security import RedisRateLimitMiddleware, SecurityHeadersMiddleware
+from .security import BodySizeLimitMiddleware, RedisRateLimitMiddleware, SecurityHeadersMiddleware
 from .schemas import (
     AttendanceRecordOut,
     AttendanceSummaryOut,
@@ -152,6 +152,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Correlation-Id"],
 )
+app.add_middleware(BodySizeLimitMiddleware)  # added last = outermost: oversized bodies never reach any other layer
 logger = logging.getLogger("offlineqr_attendance.sync")
 
 

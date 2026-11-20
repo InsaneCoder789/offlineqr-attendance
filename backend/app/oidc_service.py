@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from functools import lru_cache
 
 import jwt
@@ -8,8 +7,7 @@ from jwt import PyJWKClient
 
 from .config import get_settings
 from .errors import ApiError
-
-_KIIT_EMAIL = re.compile(r"^[^\s@]+@kiit\.ac\.in$", re.IGNORECASE)
+from .institution_identity import institution_email_allowed
 
 
 @lru_cache(maxsize=1)
@@ -39,6 +37,6 @@ def verify_oidc_identity(id_token: str) -> dict[str, str]:
     except jwt.PyJWTError as exc:
         raise ApiError("OIDC_TOKEN_INVALID", "Institutional identity token could not be verified.", 401) from exc
     email = str(claims.get("email", "")).strip().lower()
-    if claims.get("email_verified") is not True or not _KIIT_EMAIL.fullmatch(email):
-        raise ApiError("OIDC_IDENTITY_NOT_ALLOWED", "A verified KIIT identity is required.", 403)
+    if claims.get("email_verified") is not True or not institution_email_allowed(email):
+        raise ApiError("OIDC_IDENTITY_NOT_ALLOWED", "A verified institutional identity is required.", 403)
     return {"subject": str(claims["sub"]), "email": email}

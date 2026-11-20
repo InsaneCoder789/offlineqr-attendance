@@ -820,111 +820,114 @@ def _reconcile_attendance_proof(conn, submission: dict) -> dict:
     _ensure_claim_for_proof(conn, claim_payload, device["public_key"], session)
     _verify_presence_and_proof_signatures(device["public_key"], challenge, response, proof)
 
-    conn.execute(
-        """
-        INSERT INTO presence_challenges (
-            challenge_id, attendance_session_id, attendance_claim_id, presence_epoch,
-            nonce, issued_at, expires_at, transport, host_public_key, state
+    # All writes below are independent of each other's results, so send them in one round trip.
+    with conn.pipeline():
+        conn.execute(
+            """
+            INSERT INTO presence_challenges (
+                challenge_id, attendance_session_id, attendance_claim_id, presence_epoch,
+                nonce, issued_at, expires_at, transport, host_public_key, state
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'VERIFIED')
+            ON CONFLICT (challenge_id)
+            DO UPDATE SET state = 'VERIFIED'
+            """,
+            [
+                challenge["challenge_id"],
+                challenge["session_id"],
+                challenge["claim_id"],
+                challenge["presence_epoch"],
+                challenge["nonce"],
+                challenge["issued_at"],
+                challenge["expires_at"],
+                challenge["transport"],
+                challenge["host_public_key"],
+            ],
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'VERIFIED')
-        ON CONFLICT (challenge_id)
-        DO UPDATE SET state = 'VERIFIED'
-        """,
-        [
-            challenge["challenge_id"],
-            challenge["session_id"],
-            challenge["claim_id"],
-            challenge["presence_epoch"],
-            challenge["nonce"],
-            challenge["issued_at"],
-            challenge["expires_at"],
-            challenge["transport"],
-            challenge["host_public_key"],
-        ],
-    )
-    conn.execute(
-        """
-        INSERT INTO presence_responses (
-            response_id, challenge_id, attendance_session_id, attendance_claim_id,
-            device_registration_id, presence_epoch, responded_at, transport,
-            challenge_nonce, host_public_key, device_signature, state
+        conn.execute(
+            """
+            INSERT INTO presence_responses (
+                response_id, challenge_id, attendance_session_id, attendance_claim_id,
+                device_registration_id, presence_epoch, responded_at, transport,
+                challenge_nonce, host_public_key, device_signature, state
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'VERIFIED')
+            ON CONFLICT (response_id)
+            DO UPDATE SET state = 'VERIFIED'
+            """,
+            [
+                response["response_id"],
+                response["challenge_id"],
+                response["session_id"],
+                response["claim_id"],
+                response["device_registration_id"],
+                response["presence_epoch"],
+                response["responded_at"],
+                response["transport"],
+                response["challenge_nonce"],
+                response["host_public_key"],
+                response["device_signature"],
+            ],
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'VERIFIED')
-        ON CONFLICT (response_id)
-        DO UPDATE SET state = 'VERIFIED'
-        """,
-        [
-            response["response_id"],
-            response["challenge_id"],
-            response["session_id"],
-            response["claim_id"],
-            response["device_registration_id"],
-            response["presence_epoch"],
-            response["responded_at"],
-            response["transport"],
-            response["challenge_nonce"],
-            response["host_public_key"],
-            response["device_signature"],
-        ],
-    )
-    conn.execute(
-        """
-        INSERT INTO attendance_proofs (
-            proof_id, attendance_claim_id, attendance_session_id, student_id,
-            device_registration_id, presence_challenge_id, presence_response_id,
-            proof_created_at, final_device_signature, sync_state
+        conn.execute(
+            """
+            INSERT INTO attendance_proofs (
+                proof_id, attendance_claim_id, attendance_session_id, student_id,
+                device_registration_id, presence_challenge_id, presence_response_id,
+                proof_created_at, final_device_signature, sync_state
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'SERVER_VERIFIED')
+            ON CONFLICT (proof_id)
+            DO UPDATE SET sync_state = 'SERVER_VERIFIED', updated_at = now()
+            """,
+            [
+                proof["proof_id"],
+                proof["claim_id"],
+                proof["session_id"],
+                proof["student_id"],
+                proof["device_registration_id"],
+                proof["presence_challenge_id"],
+                proof["presence_response_id"],
+                proof["proof_created_at"],
+                proof["final_device_signature"],
+            ],
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'SERVER_VERIFIED')
-        ON CONFLICT (proof_id)
-        DO UPDATE SET sync_state = 'SERVER_VERIFIED', updated_at = now()
-        """,
-        [
-            proof["proof_id"],
-            proof["claim_id"],
-            proof["session_id"],
-            proof["student_id"],
-            proof["device_registration_id"],
-            proof["presence_challenge_id"],
-            proof["presence_response_id"],
-            proof["proof_created_at"],
-            proof["final_device_signature"],
-        ],
-    )
-    record = conn.execute(
-        """
-        INSERT INTO attendance_records (
-            attendance_session_id, student_id, device_registration_id, status,
-            method, technical_state, recorded_at
+        record_cursor = conn.execute(
+            """
+            INSERT INTO attendance_records (
+                attendance_session_id, student_id, device_registration_id, status,
+                method, technical_state, recorded_at
+            )
+            VALUES (%s, %s, %s, 'PRESENT', 'SECURE_PROOF', 'SERVER_VERIFIED', %s)
+            ON CONFLICT (attendance_session_id, student_id)
+            DO UPDATE SET status = 'PRESENT',
+                          method = CASE
+                            WHEN attendance_records.method = 'FACULTY_ATTESTATION'
+                            THEN attendance_records.method
+                            ELSE 'SECURE_PROOF'
+                          END,
+                          device_registration_id = COALESCE(
+                            attendance_records.device_registration_id,
+                            excluded.device_registration_id
+                          ),
+                          technical_state = 'SERVER_VERIFIED',
+                          updated_at = now()
+            RETURNING id, status::text AS status, method::text AS method, recorded_at,
+                      EXTRACT(EPOCH FROM updated_at)::bigint AS server_version
+            """,
+            [
+                proof["session_id"],
+                proof["student_id"],
+                proof["device_registration_id"],
+                proof["proof_created_at"],
+            ],
         )
-        VALUES (%s, %s, %s, 'PRESENT', 'SECURE_PROOF', 'SERVER_VERIFIED', %s)
-        ON CONFLICT (attendance_session_id, student_id)
-        DO UPDATE SET status = 'PRESENT',
-                      method = CASE
-                        WHEN attendance_records.method = 'FACULTY_ATTESTATION'
-                        THEN attendance_records.method
-                        ELSE 'SECURE_PROOF'
-                      END,
-                      device_registration_id = COALESCE(
-                        attendance_records.device_registration_id,
-                        excluded.device_registration_id
-                      ),
-                      technical_state = 'SERVER_VERIFIED',
-                      updated_at = now()
-        RETURNING id, status::text AS status, method::text AS method, recorded_at,
-                  EXTRACT(EPOCH FROM updated_at)::bigint AS server_version
-        """,
-        [
-            proof["session_id"],
-            proof["student_id"],
-            proof["device_registration_id"],
-            proof["proof_created_at"],
-        ],
-    ).fetchone()
-    conn.execute(
-        "UPDATE attendance_claims SET claim_state = 'CONSUMED', updated_at = now() WHERE claim_id = %s",
-        [proof["claim_id"]],
-    )
-    _audit(conn, "ATTENDANCE_PROOF_ACCEPTED", "attendance_proof", proof["proof_id"], str(proof["student_id"]))
+        conn.execute(
+            "UPDATE attendance_claims SET claim_state = 'CONSUMED', updated_at = now() WHERE claim_id = %s",
+            [proof["claim_id"]],
+        )
+        _audit(conn, "ATTENDANCE_PROOF_ACCEPTED", "attendance_proof", proof["proof_id"], str(proof["student_id"]))
+    record = record_cursor.fetchone()
     return {
         "proof_id": proof["proof_id"],
         "result": "ACCEPTED",

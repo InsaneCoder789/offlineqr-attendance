@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import logging
+import os
 from hashlib import sha256
 from time import perf_counter
 from uuid import uuid4
@@ -61,13 +63,13 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
         elif path.startswith("/api/v1/student/auth"):
             scope, limit = "student-auth", 120
         elif path.startswith("/api/v1/attendance"):
-            scope, limit = "attendance", 600
+            scope, limit = "attendance", ATTENDANCE_RATE_PER_MIN
         else:
             scope, limit = path.split("/")[3], 180
         try:
             if scope in {"faculty-auth", "student-auth", "attendance"}:
                 # Per-IP ceiling: rotating a bogus credential must not mint a fresh bucket.
-                ip_limit = limit * (5 if scope == "attendance" else 3)
+                ip_limit = ATTENDANCE_IP_RATE_PER_MIN if scope == "attendance" else limit * 3
                 ip_result = consume_rate_limit(f"{scope}-ip", f"ip:{self._client_ip(request)}", limit=ip_limit, window_seconds=60)
                 if not ip_result.allowed:
                     return JSONResponse(
@@ -107,3 +109,65 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
             if len(parts) >= hops:
                 return parts[-hops][:64]
         return request.client.host if request.client else "unknown"
+
+
+# Attendance proofs are device-signed and arrive in class-start bursts, often from one campus NAT address.
+# Defaults are conservative; set both to the expected students-per-address before launch (measured: with
+# 600/3000 a single NAT address drains only ~14 proofs/s, i.e. 37 minutes for 30,000 students).
+ATTENDANCE_RATE_PER_MIN = int(os.environ.get("ATTENDANCE_RATE_PER_MIN", "600"))
+ATTENDANCE_IP_RATE_PER_MIN = int(os.environ.get("ATTENDANCE_IP_RATE_PER_MIN", "3000"))
+MAX_REQUEST_BODY_BYTES = int(os.environ.get("MAX_REQUEST_BODY_BYTES", str(1024 * 1024)))
+
+
+class _BodyTooLarge(Exception):
+    pass
+
+
+class BodySizeLimitMiddleware:
+    """Reject oversized request bodies before they are buffered (largest legitimate call is a 50-proof batch, ~200 KB)."""
+
+    def __init__(self, app, max_bytes: int | None = None) -> None:
+        self.app = app
+        self.max_bytes = max_bytes if max_bytes is not None else MAX_REQUEST_BODY_BYTES
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        declared = dict(scope["headers"]).get(b"content-length")
+        try:
+            too_big = declared is not None and int(declared) > self.max_bytes
+        except ValueError:
+            too_big = True
+        if too_big:
+            await self._reject(send)
+            return
+        received = 0
+        started = False
+
+        async def limited_receive():
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > self.max_bytes:
+                    raise _BodyTooLarge
+            return message
+
+        async def tracking_send(message):
+            nonlocal started
+            if message["type"] == "http.response.start":
+                started = True
+            await send(message)
+
+        try:
+            await self.app(scope, limited_receive, tracking_send)
+        except _BodyTooLarge:
+            if not started:
+                await self._reject(send)
+
+    @staticmethod
+    async def _reject(send) -> None:
+        body = json.dumps({"error": {"code": "PAYLOAD_TOO_LARGE", "message": "Request body is too large."}}).encode()
+        await send({"type": "http.response.start", "status": 413, "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]})
+        await send({"type": "http.response.body", "body": body})

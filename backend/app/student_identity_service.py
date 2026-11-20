@@ -18,7 +18,28 @@ from .redis_service import create_student_session, revoke_student_sessions
 
 _PASSWORD_HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2)
 _MAX_FAILED_LOGINS = 5
-_LOCKOUT_DURATION = timedelta(minutes=15)
+# Progressive lockout: a stranger typing a classmate's roll number cannot keep them out for long, while a
+# sustained guessing run still ends at the full 15 minutes. Counter resets on a successful sign-in.
+_LOCKOUT_STEPS = {5: timedelta(minutes=1), 6: timedelta(minutes=2), 7: timedelta(minutes=5)}
+_LOCKOUT_MAX = timedelta(minutes=15)
+
+
+# Unknown and locked accounts must cost the same Argon2 time as a real wrong password; otherwise response time
+# reveals which identities exist (measured: 80 ms for a real roll number vs 8 ms for an unknown one).
+_DUMMY_HASH = _PASSWORD_HASHER.hash("timing-equaliser-not-a-real-password")
+
+
+def _burn_hash_time(password: str) -> None:
+    try:
+        _PASSWORD_HASHER.verify(_DUMMY_HASH, password)
+    except (InvalidHashError, VerifyMismatchError):
+        pass
+
+
+def _lockout_for(failures: int) -> timedelta | None:
+    if failures < _MAX_FAILED_LOGINS:
+        return None
+    return _LOCKOUT_STEPS.get(failures, _LOCKOUT_MAX)
 
 
 def authenticate_student(roll_number: str, password: str) -> tuple[dict, str]:
@@ -37,6 +58,7 @@ def authenticate_student(roll_number: str, password: str) -> tuple[dict, str]:
                 [roll],
             ).fetchone()
             if row is None or (row["locked_until"] is not None and row["locked_until"] > now):
+                _burn_hash_time(password)
                 rejected = True
             else:
                 try:
@@ -46,7 +68,8 @@ def authenticate_student(roll_number: str, password: str) -> tuple[dict, str]:
                 if not valid:
                     # Commit the failure counter; raising inside the transaction would roll it back.
                     failures = int(row["failed_login_count"]) + 1
-                    locked_until = now + _LOCKOUT_DURATION if failures >= _MAX_FAILED_LOGINS else None
+                    lock = _lockout_for(failures)
+                    locked_until = now + lock if lock else None
                     conn.execute(
                         "UPDATE student_credentials SET failed_login_count=%s, locked_until=%s, updated_at=now() WHERE student_id=%s",
                         [failures, locked_until, row["id"]],

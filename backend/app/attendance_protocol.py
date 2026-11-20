@@ -15,10 +15,16 @@ ATTENDANCE_CLAIM_PROTOCOL = "ATTENDANCE_CLAIM_V1"
 QR_EPOCH_SECONDS = 5
 CLAIM_SECONDS = 60
 CLOCK_SKEW_SECONDS = 2
+SESSION_AUTHORIZATION_MAX_SECONDS = 12 * 60 * 60
 
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def javascript_date_precision(value: datetime) -> datetime:
+    """Match the millisecond precision retained by JavaScript Date."""
+    return value.replace(microsecond=(value.microsecond // 1000) * 1000)
 
 
 def institution_signing_key() -> SigningKey:

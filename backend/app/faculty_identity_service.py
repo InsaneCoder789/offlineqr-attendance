@@ -19,6 +19,18 @@ from .redis_service import create_faculty_session, revoke_faculty_sessions
 _PASSWORD_HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2)
 _MAX_FAILED_LOGINS = 5
 _LOCKOUT_DURATION = timedelta(minutes=15)
+
+
+# Unknown and locked accounts must cost the same Argon2 time as a real wrong password; otherwise response time
+# reveals which identities exist (measured: 80 ms for a real roll number vs 8 ms for an unknown one).
+_DUMMY_HASH = _PASSWORD_HASHER.hash("timing-equaliser-not-a-real-password")
+
+
+def _burn_hash_time(password: str) -> None:
+    try:
+        _PASSWORD_HASHER.verify(_DUMMY_HASH, password)
+    except (InvalidHashError, VerifyMismatchError):
+        pass
 _PHONE_PATTERN = re.compile(r"^\+?[0-9][0-9 -]{6,23}$")
 
 
@@ -47,6 +59,7 @@ def authenticate_faculty(email: str, password: str) -> tuple[dict, str, str]:
                 [normalized_email],
             ).fetchone()
             if row is None or (row["locked_until"] is not None and row["locked_until"] > now):
+                _burn_hash_time(password)
                 rejected = True
             else:
                 try:
