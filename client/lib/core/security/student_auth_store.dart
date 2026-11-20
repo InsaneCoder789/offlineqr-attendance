@@ -28,7 +28,7 @@ class StudentAuthStore {
               iOptions: IOSOptions(
                 accessibility: KeychainAccessibility.unlocked_this_device,
                 synchronizable: false,
-                accountName: 'in.ac.kiit.attendance.student-session',
+                accountName: 'com.offlineqr.attendance.student-session',
               ),
             );
 

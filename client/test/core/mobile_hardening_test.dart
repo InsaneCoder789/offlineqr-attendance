@@ -57,9 +57,111 @@ void main() {
     );
   });
 
+  Map<String, dynamic> accepted(String id) => {
+        'proof_id': id,
+        'result': 'ACCEPTED',
+        'attendance_record_id': 'rec-$id',
+        'attendance_method': 'SECURE_PROOF',
+        'recorded_at': '2026-09-02T10:00:01Z',
+      };
+
+  OutboxProbe probe(LocalAttendanceDatabase db, String id) {
+    final rows = db.pendingProofOutboxEntries(
+      now: '2999-01-01T00:00:00Z',
+      force: true,
+    );
+    final match = rows.where((e) => e.proofId == id);
+    return OutboxProbe(match.isEmpty ? null : match.single);
+  }
+
+  test('per-proof results: permanent rejection does not block the rest',
+      () async {
+    final database = LocalAttendanceDatabase.inMemory();
+    addTearDown(database.close);
+    database.applyBootstrap(sampleBootstrapPayload());
+    for (final id in ['p-ok', 'p-conflict', 'p-temp']) {
+      _enqueueProof(database, id);
+    }
+    final service = AttendanceProofSyncService(
+      database: database,
+      baseUri: Uri.parse('https://attendance.example'),
+      client: MockClient((_) async => http.Response(
+            jsonEncode({
+              'results': [
+                accepted('p-ok'),
+                {
+                  'proof_id': 'p-conflict',
+                  'result': 'REJECTED',
+                  'error_code': 'CLAIM_CONFLICT',
+                  'retryable': false,
+                },
+                {
+                  'proof_id': 'p-temp',
+                  'result': 'REJECTED',
+                  'error_code': 'TEMPORARY_DATABASE_ERROR',
+                  'retryable': true,
+                },
+              ],
+            }),
+            200,
+          )),
+    );
+
+    final report = await service.syncPendingProofs(force: true);
+
+    expect(report.accepted, 1);
+    expect(report.rejected, 1);
+    expect(report.retryPending, 1);
+    final pending = probe(database, 'p-temp').entry!;
+    expect(pending.state, 'RETRY_PENDING');
+    expect(pending.lastErrorCode, 'TEMPORARY_DATABASE_ERROR');
+    expect(probe(database, 'p-ok').entry, isNull);
+    expect(probe(database, 'p-conflict').entry, isNull);
+  });
+
+  test('HTTP 429 honours Retry-After when longer than the backoff', () async {
+    final database = LocalAttendanceDatabase.inMemory();
+    addTearDown(database.close);
+    database.applyBootstrap(sampleBootstrapPayload());
+    _enqueueProof(database, 'p-429');
+    final service = AttendanceProofSyncService(
+      database: database,
+      baseUri: Uri.parse('https://attendance.example'),
+      client: MockClient(
+          (_) async => http.Response('', 429, headers: {'retry-after': '600'})),
+    );
+
+    await service.syncPendingProofs(force: true);
+
+    final entry = probe(database, 'p-429').entry!;
+    expect(entry.lastErrorCode, 'HTTP_429');
+    final next = DateTime.parse(entry.nextAttemptAt!);
+    expect(
+      next.isAfter(DateTime.now().toUtc().add(const Duration(seconds: 590))),
+      isTrue,
+    );
+  });
+
+  test('a whole-batch HTTP 500 backs off every proof', () async {
+    final database = LocalAttendanceDatabase.inMemory();
+    addTearDown(database.close);
+    database.applyBootstrap(sampleBootstrapPayload());
+    _enqueueProof(database, 'p-500');
+    final service = AttendanceProofSyncService(
+      database: database,
+      baseUri: Uri.parse('https://attendance.example'),
+      client: MockClient((_) async => http.Response('boom', 500)),
+    );
+
+    final report = await service.syncPendingProofs(force: true);
+
+    expect(report.retryPending, 1);
+    expect(probe(database, 'p-500').entry!.lastErrorCode, 'HTTP_500');
+  });
+
   test('an interrupted sync is recovered when the local database reopens', () {
     final directory =
-        Directory.systemTemp.createTempSync('kiit_mobile_hardening_');
+        Directory.systemTemp.createTempSync('offlineqr_mobile_hardening_');
     addTearDown(() => directory.deleteSync(recursive: true));
     final path = '${directory.path}/attendance.sqlite';
     final first = LocalAttendanceDatabase.openAtPath(path);
@@ -79,10 +181,16 @@ void main() {
   });
 }
 
+final _sessionSlots = <String, int>{};
+
 void _enqueueProof(LocalAttendanceDatabase database, String proofId) {
   const now = '2026-09-02T10:00:00Z';
   const studentId = '50000000-0000-4000-8000-000000000001';
-  const sessionId = '80000000-0000-4000-8000-000000000001';
+  // The local store keeps one claim per (session, student), so each enqueued
+  // proof uses its own fixture session (the fixture has three).
+  final sessionNumber =
+      _sessionSlots.putIfAbsent(proofId, () => _sessionSlots.length % 3 + 1);
+  final sessionId = '80000000-0000-4000-8000-00000000000$sessionNumber';
   final claimId = 'claim-$proofId';
   database.saveAttendanceClaim(
     AttendanceClaimProjection(
@@ -111,4 +219,9 @@ void _enqueueProof(LocalAttendanceDatabase database, String proofId) {
     payloadJson: jsonEncode({'protocol_version': 'ATTENDANCE_PROOF_V1'}),
     createdAt: now,
   );
+}
+
+class OutboxProbe {
+  const OutboxProbe(this.entry);
+  final AttendanceProofOutboxEntry? entry;
 }

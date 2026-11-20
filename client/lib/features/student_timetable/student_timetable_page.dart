@@ -1,690 +1,460 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/database/local_database.dart';
-import '../../ui/kiit_components.dart';
-import '../../ui/kiit_theme.dart';
+import '../../ui/dark_kit.dart';
+import '../../ui/dark_kit_extra_a.dart';
+import '../../ui/date_picker_common.dart';
+import '../../ui/date_picker_strip.dart';
+import '../../ui/product_theme.dart';
+import '../../ui/responsive.dart';
+import '../../ui/state_views.dart';
 
+/// Timetable: date picker, one hero for the live/next class, and an agenda.
+/// Everything lives in a scroll view, so no text size or screen height can
+/// overflow it. "Today" and countdowns use institution time (IST).
+///
+/// Database reads are synchronous, so there is no loading skeleton: the first
+/// frame already has data. A thrown read shows [StateView.error] with retry.
 class StudentTimetablePage extends StatefulWidget {
-  const StudentTimetablePage({super.key, required this.database});
+  const StudentTimetablePage({
+    super.key,
+    required this.database,
+    this.syncError,
+    this.onSync,
+  });
 
   final LocalAttendanceDatabase database;
+
+  /// Last sync failure, if any. Shows an offline strip above the content.
+  final String? syncError;
+
+  /// Offered as the action when no timetable has been synced yet.
+  final Future<void> Function()? onSync;
 
   @override
   State<StudentTimetablePage> createState() => _StudentTimetablePageState();
 }
 
 class _StudentTimetablePageState extends State<StudentTimetablePage> {
-  late DateTime selectedDate;
+  late DateTime _selected = dayOnly(institutionNow());
+  DateTime _now = institutionNow();
+  List<List<TimetableItem>> _week = const [];
+  Object? _error;
+  Timer? _tick;
 
   @override
   void initState() {
     super.initState();
-    selectedDate = DateTime.now();
+    _load();
+    _tick = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() => _now = institutionNow());
+    });
+  }
+
+  @override
+  void didUpdateWidget(StudentTimetablePage old) {
+    super.didUpdateWidget(old);
+    if (old.database != widget.database) _load();
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  void _load() {
+    try {
+      _week = [for (var d = 1; d <= 7; d++) widget.database.getTimetableForDay(d)];
+      _error = null;
+    } catch (e) {
+      _week = const [];
+      _error = e;
+    }
+  }
+
+  int _countOf(DateTime d) => _week.isEmpty ? 0 : _week[d.weekday - 1].length;
+
+  /// First day after [from] (within eight weeks) that has classes.
+  DateTime? _nextClassDay(DateTime from) {
+    for (var i = 1; i <= 56; i++) {
+      final d = addDays(from, i);
+      if (_countOf(d) > 0) return d;
+    }
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
-    final today = DateTime.now();
-    final items = widget.database.getTimetableForDay(selectedDate.weekday);
-    final isShowingToday = _isSameDay(selectedDate, today);
+    final now = _now;
+    final today = dayOnly(now);
+    final sel = _selected;
+    final isToday = sameDay(sel, today);
+    final isPast = sel.isBefore(today);
+    final failed = _error != null;
+    final hasAny = _week.any((d) => d.isNotEmpty);
+    final items = failed ? const <TimetableItem>[] : _week[sel.weekday - 1];
+    final phases = [for (final i in items) _phaseOf(i, now, isToday, isPast)];
+    final liveIndex = phases.indexOf(_Phase.now);
+    final nextIndex = phases.indexOf(_Phase.upcoming);
+    final heroIndex = isToday ? (liveIndex >= 0 ? liveIndex : nextIndex) : -1;
+    final allDone = isToday && items.isNotEmpty && phases.every((p) => p == _Phase.done);
+    final jumpTo = items.isEmpty || allDone ? _nextClassDay(sel) : null;
 
     return Scaffold(
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: AdaptivePage(
           children: [
-            // Header Section
-            Padding(
-              padding: const EdgeInsets.fromLTRB(KiitSpacing.x4, KiitSpacing.x4,
-                  KiitSpacing.x4, KiitSpacing.x2),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Timetable',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w900,
-                                color: KiitColors.textPrimary,
-                              ),
-                        ),
-                        const SizedBox(height: KiitSpacing.x1),
-                        Text(
-                          _fullDateLabel(selectedDate),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: KiitColors.textSecondary,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                        ),
-                      ],
+            _Header(date: sel),
+            const SizedBox(height: ProductSpacing.x3),
+            if (widget.syncError != null && !failed) ...[
+              const StatusStrip(message: 'Can\'t sync right now. Showing your saved timetable.'),
+              const SizedBox(height: ProductSpacing.x3),
+            ],
+            if (failed)
+              StateView.error(
+                title: 'Couldn\'t load your timetable',
+                message: 'Please try again. Your saved data is safe on this phone.',
+                onAction: () => setState(_load),
+              )
+            else ...[
+              DatePickerStrip(
+                selected: sel,
+                today: today,
+                classCountOf: _countOf,
+                onSelected: (d) => setState(() => _selected = dayOnly(d)),
+              ),
+              const SizedBox(height: ProductSpacing.x5),
+              if (!hasAny)
+                StateView.empty(
+                  icon: Icons.cloud_download_outlined,
+                  title: 'No timetable yet',
+                  message: 'Sync to download your timetable. Once synced it works offline.',
+                  actionLabel: widget.onSync != null ? 'Sync now' : null,
+                  onAction: widget.onSync == null ? null : () => widget.onSync!(),
+                )
+              else if (items.isEmpty)
+                StateView.empty(
+                  icon: Icons.event_available_outlined,
+                  title: 'No classes this day',
+                  message: jumpTo == null
+                      ? 'Nothing is scheduled. Your synced timetable stays available offline.'
+                      : 'Nothing is scheduled. Enjoy the free time.',
+                  actionLabel: jumpTo == null ? null : 'Jump to ${_shortDate(jumpTo)}',
+                  onAction: jumpTo == null ? null : () => setState(() => _selected = jumpTo),
+                )
+              else ...[
+                if (heroIndex >= 0) ...[
+                  _Hero(item: items[heroIndex], live: phases[heroIndex] == _Phase.now, now: now),
+                  const SizedBox(height: ProductSpacing.x5),
+                ] else if (allDone) ...[
+                  StateView.empty(
+                    icon: Icons.check_circle_outline_rounded,
+                    title: 'Classes are over',
+                    message: 'Today\'s classes are complete. Attendance stays available offline.',
+                    compact: true,
+                    actionLabel: jumpTo == null ? null : 'Jump to ${_shortDate(jumpTo)}',
+                    onAction: jumpTo == null ? null : () => setState(() => _selected = jumpTo),
+                  ),
+                  const SizedBox(height: ProductSpacing.x5),
+                ],
+                _AgendaHeading(count: items.length),
+                const SizedBox(height: ProductSpacing.x2),
+                for (var i = 0; i < items.length; i++)
+                  RepaintBoundary(
+                    child: Reveal(
+                      index: i,
+                      child: _AgendaRow(
+                        item: items[i],
+                        phase: phases[i],
+                        isNext: isToday && i == nextIndex && liveIndex < 0,
+                        clash: _clashes(items, i),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: KiitSpacing.x3),
-                  if (!isShowingToday)
-                    OutlinedButton.icon(
-                      onPressed: () => setState(() => selectedDate = today),
-                      icon: const Icon(Icons.today_outlined, size: 18),
-                      label: const Text('Today'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: KiitSpacing.x3,
-                          vertical: KiitSpacing.x1,
-                        ),
-                        minimumSize: const Size(80, 36),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-
-            // Date Strip Selector
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: KiitSpacing.x2),
-              child: _DateStrip(
-                selectedDate: selectedDate,
-                onSelected: (date) => setState(() => selectedDate = date),
-              ),
-            ),
-
-            const Divider(),
-
-            // Timeline Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(KiitSpacing.x4, KiitSpacing.x4,
-                  KiitSpacing.x4, KiitSpacing.x2),
-              child: Text(
-                _weekdayName(selectedDate.weekday).toUpperCase(),
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.2,
-                      color: KiitColors.textMuted,
-                    ),
-              ),
-            ),
-
-            Expanded(
-              child: items.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.all(KiitSpacing.x4),
-                      child: Center(
-                        child: CuteEmptyState(
-                          title: 'Classes are over',
-                          message:
-                              'No classes are scheduled for this day. Your synced timetable is still available offline.',
-                        ),
-                      ),
-                    )
-                  : _buildClassList(items, today),
-            ),
+              ],
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildClassList(List<TimetableItem> items, DateTime now) {
-    final states = [for (final item in items) _getClassState(item, now)];
-    final nowIndex = states.indexOf(_ClassState.now);
-    final nextIndex = states.indexOf(_ClassState.upcoming);
-    final currentIndex = nowIndex >= 0 ? nowIndex : nextIndex;
-    final allCompleted = _isSameDay(selectedDate, now) &&
-        states.every((s) => s == _ClassState.completed);
+  static String _shortDate(DateTime d) => '${kWeekdayNames[d.weekday - 1]} ${d.day}';
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(
-        horizontal: KiitSpacing.x4,
-        vertical: KiitSpacing.x2,
-      ),
-      itemCount: items.length + 1,
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          if (currentIndex >= 0) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: KiitSpacing.x4),
-              child: RepaintBoundary(
-                child: _CurrentClassCard(
-                  item: items[currentIndex],
-                  state: states[currentIndex],
-                  now: now,
-                ),
-              ),
-            );
-          }
-          if (allCompleted) {
-            return const Padding(
-              padding: EdgeInsets.only(bottom: KiitSpacing.x4),
-              child: CuteEmptyState(
-                title: 'Classes are over',
-                message:
-                    'Your scheduled classes for today are complete. Attendance records stay available offline.',
-              ),
-            );
-          }
-          return const SizedBox.shrink();
-        }
-        final itemIndex = index - 1;
-        return RepaintBoundary(
-          child: _ScheduleClassCard(
-            item: items[itemIndex],
-            state: states[itemIndex],
-            isNext: itemIndex == nextIndex,
-          ),
-        );
-      },
-    );
+  static bool _clashes(List<TimetableItem> items, int i) {
+    final a = items[i];
+    final aStart = _minutes(a.startTime);
+    final aEnd = _minutes(a.endTime);
+    for (var j = 0; j < items.length; j++) {
+      if (j == i) continue;
+      if (aStart < _minutes(items[j].endTime) && _minutes(items[j].startTime) < aEnd) return true;
+    }
+    return false;
   }
 
-  _ClassState _getClassState(TimetableItem item, DateTime now) {
-    if (!_isSameDay(selectedDate, now)) {
-      return _ClassState.upcoming;
-    }
+  static _Phase _phaseOf(TimetableItem item, DateTime now, bool isToday, bool isPast) {
+    if (isPast) return _Phase.done;
+    if (!isToday) return _Phase.upcoming;
+    final current = now.hour * 60 + now.minute;
     final start = _minutes(item.startTime);
     final end = _minutes(item.endTime);
-    final current = now.hour * 60 + now.minute;
-
-    if (current >= start && current <= end) {
-      return _ClassState.now;
-    } else if (current < start) {
-      return _ClassState.upcoming;
-    } else {
-      return _ClassState.completed;
-    }
-  }
-
-  int _minutes(String value) {
-    final parts = value.split(':');
-    return int.parse(parts[0]) * 60 + int.parse(parts[1]);
-  }
-
-  String _weekdayName(int weekday) {
-    const names = [
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday'
-    ];
-    return names[weekday - 1];
-  }
-
-  String _fullDateLabel(DateTime date) {
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December'
-    ];
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
-  }
-
-  bool _isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
+    if (current >= start && current <= end) return _Phase.now;
+    return current < start ? _Phase.upcoming : _Phase.done;
   }
 }
 
-enum _ClassState { completed, now, upcoming }
+enum _Phase { done, now, upcoming }
 
-class _DateStrip extends StatelessWidget {
-  const _DateStrip({required this.selectedDate, required this.onSelected});
+int _minutes(String value) {
+  final p = value.split(':');
+  return int.parse(p[0]) * 60 + int.parse(p[1]);
+}
 
-  final DateTime selectedDate;
-  final ValueChanged<DateTime> onSelected;
+String _hhmm(String v) => v.length >= 5 ? v.substring(0, 5) : v;
+
+class _Header extends StatelessWidget {
+  const _Header({required this.date});
+
+  final DateTime date;
 
   @override
   Widget build(BuildContext context) {
-    final today = DateTime.now();
-    final monday = today.subtract(Duration(days: today.weekday - 1));
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: ProductSpacing.x4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Timetable',
+              style: text.displaySmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -1.2, height: 1.05),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 4),
+          Text(
+            '${kWeekdayNames[date.weekday - 1]}, ${date.day} ${kMonthNames[date.month - 1]}',
+            style: text.bodyLarge?.copyWith(color: ProductColors.textSecondary),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-    return SizedBox(
-      height: 84,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: KiitSpacing.x4),
-        itemCount: 7,
-        itemBuilder: (context, index) {
-          final date = monday.add(Duration(days: index));
-          final isSelected = date.weekday == selectedDate.weekday;
-          final isToday = date.year == today.year &&
-              date.month == today.month &&
-              date.day == today.day;
+class _AgendaHeading extends StatelessWidget {
+  const _AgendaHeading({required this.count});
 
-          return Padding(
-            padding: const EdgeInsets.only(right: KiitSpacing.x2),
-            child: AspectRatio(
-              aspectRatio: 0.85,
-              child: Material(
-                color: isSelected
-                    ? KiitColors.brandPrimary
-                    : isToday
-                        ? KiitColors.brandPrimarySoft
-                        : KiitColors.surface,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(KiitRadius.medium),
-                  side: BorderSide(
-                    color: isSelected
-                        ? KiitColors.brandPrimary
-                        : isToday
-                            ? KiitColors.brandPrimary.withValues(alpha: 0.3)
-                            : KiitColors.border,
-                    width: isToday || isSelected ? 1.5 : 1.0,
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.labelMedium?.copyWith(
+          letterSpacing: 1.6,
+          fontWeight: FontWeight.w800,
+          color: ProductColors.textMuted,
+        );
+    return Row(
+      children: [
+        Text('AGENDA', style: style),
+        const SizedBox(width: ProductSpacing.x2),
+        Expanded(
+          child: Text(classCountLabel(count),
+              textAlign: TextAlign.end,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: style?.copyWith(letterSpacing: 0.4)),
+        ),
+      ],
+    );
+  }
+}
+
+class _Hero extends StatelessWidget {
+  const _Hero({required this.item, required this.live, required this.now});
+
+  final TimetableItem item;
+  final bool live;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = now.hour * 60 + now.minute;
+    final mins = live ? _minutes(item.endTime) - current : _minutes(item.startTime) - current;
+    final text = Theme.of(context).textTheme;
+    final m = mins < 0 ? 0 : mins;
+    final big = live ? '${m.clamp(0, 999)}' : (m < 60 ? '$m' : '${m ~/ 60}:${(m % 60).toString().padLeft(2, '0')}');
+    final unit = live ? 'min left' : (m < 60 ? 'min to start' : 'h to start');
+    return NeonHero(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: ProductSpacing.x3,
+            runSpacing: ProductSpacing.x2,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              NeonPill(
+                label: live ? 'Happening now' : 'Up next',
+                icon: live ? Icons.bolt_rounded : Icons.schedule_rounded,
+                filled: true,
+              ),
+              Text(
+                live ? '$m min left' : 'Starts in ${_countdown(mins)}',
+                style: text.labelLarge?.copyWith(color: ProductColors.textSecondary, fontFeatures: tabularFigures),
+              ),
+            ],
+          ),
+          const SizedBox(height: ProductSpacing.x5),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(big,
+                      style: text.displayLarge?.copyWith(
+                          fontSize: 76,
+                          height: 1.0,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -3,
+                          color: ProductColors.textPrimary,
+                          fontFeatures: tabularFigures)),
+                ),
+              ),
+              const SizedBox(width: ProductSpacing.x2),
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(unit,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.titleMedium?.copyWith(color: ProductColors.brandPrimary, fontWeight: FontWeight.w800)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: ProductSpacing.x3),
+          Text(item.courseName,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: text.headlineSmall?.copyWith(
+                  color: ProductColors.textPrimary, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+          const SizedBox(height: ProductSpacing.x3),
+          Wrap(
+            spacing: ProductSpacing.x4,
+            runSpacing: ProductSpacing.x2,
+            children: [
+              _Meta(icon: Icons.schedule_rounded, label: '${_hhmm(item.startTime)} – ${_hhmm(item.endTime)}', color: ProductColors.textPrimary),
+              _Meta(icon: Icons.meeting_room_outlined, label: item.room, color: ProductColors.textPrimary),
+              _Meta(icon: Icons.groups_outlined, label: item.sectionCode, color: ProductColors.textPrimary),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _countdown(int mins) {
+    final m = mins < 0 ? 0 : mins;
+    if (m < 60) return '$m min';
+    return '${m ~/ 60} h ${m % 60} min';
+  }
+}
+
+class _AgendaRow extends StatelessWidget {
+  const _AgendaRow({required this.item, required this.phase, required this.isNext, required this.clash});
+
+  final TimetableItem item;
+  final _Phase phase;
+  final bool isNext;
+  final bool clash;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final live = phase == _Phase.now;
+    final done = phase == _Phase.done;
+    final accent = courseAccent(item.courseCode);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: ProductSpacing.x3),
+      child: Opacity(
+        opacity: done ? 0.62 : 1,
+        child: GlassCard(
+          padding: EdgeInsets.zero,
+          radius: ProductRadius.large + 2,
+          glow: live ? accent : null,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  width: 5,
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: const BorderRadiusDirectional.horizontal(start: Radius.circular(ProductRadius.large + 2)),
                   ),
                 ),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(KiitRadius.medium),
-                  onTap: () => onSelected(date),
+                Expanded(
                   child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(vertical: KiitSpacing.x2),
+                    padding: const EdgeInsets.all(ProductSpacing.x4),
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          _shortWeekday(date.weekday).toUpperCase(),
-                          style: TextStyle(
-                            color: isSelected
-                                ? Colors.white
-                                : isToday
-                                    ? KiitColors.brandPrimaryStrong
-                                    : KiitColors.textSecondary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5,
-                          ),
+                        Wrap(
+                          spacing: ProductSpacing.x2,
+                          runSpacing: ProductSpacing.x1,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(_hhmm(item.startTime),
+                                style: text.headlineSmall?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.8,
+                                    color: done ? ProductColors.textMuted : accent,
+                                    fontFeatures: tabularFigures)),
+                            if (live) const NeonPill(label: 'Now', icon: Icons.bolt_rounded, filled: true)
+                            else if (isNext) NeonPill(label: 'Next', icon: Icons.schedule_rounded, color: accent)
+                            else if (done) const NeonPill(label: 'Done', icon: Icons.check_rounded, color: ProductColors.textMuted),
+                            if (clash) const NeonPill(label: 'Overlaps', icon: Icons.layers_outlined, color: ProductColors.warning),
+                          ],
                         ),
-                        const SizedBox(height: KiitSpacing.x1),
-                        Text(
-                          date.day.toString(),
-                          style: TextStyle(
-                            color: isSelected
-                                ? Colors.white
-                                : KiitColors.textPrimary,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                          ),
+                        const SizedBox(height: ProductSpacing.x2),
+                        Text(item.courseName,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: text.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: done ? ProductColors.textSecondary : ProductColors.textPrimary)),
+                        const SizedBox(height: ProductSpacing.x2),
+                        Wrap(
+                          spacing: ProductSpacing.x3,
+                          runSpacing: ProductSpacing.x1,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            _Meta(icon: Icons.schedule_rounded, label: '${_hhmm(item.startTime)} – ${_hhmm(item.endTime)}', color: ProductColors.textSecondary),
+                            _Meta(icon: Icons.meeting_room_outlined, label: item.room, color: ProductColors.textSecondary),
+                            _Meta(icon: Icons.school_outlined, label: item.courseCode, color: accent),
+                          ],
                         ),
                       ],
                     ),
                   ),
                 ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  String _shortWeekday(int weekday) {
-    const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return names[weekday - 1];
-  }
-}
-
-class _ScheduleClassCard extends StatelessWidget {
-  const _ScheduleClassCard({
-    required this.item,
-    required this.state,
-    required this.isNext,
-  });
-
-  final TimetableItem item;
-  final _ClassState state;
-  final bool isNext;
-
-  @override
-  Widget build(BuildContext context) {
-    final active = state == _ClassState.now;
-    final completed = state == _ClassState.completed;
-    final background = active
-        ? KiitColors.brandPrimary
-        : completed
-            ? KiitColors.surface.withValues(alpha: 0.78)
-            : KiitColors.surface;
-    final primaryText = active ? Colors.white : KiitColors.textPrimary;
-    final secondaryText = active
-        ? Colors.white.withValues(alpha: 0.86)
-        : KiitColors.textSecondary;
-    final strongText = active ? Colors.white : KiitColors.brandPrimaryStrong;
-    final chipTone = active
-        ? _InCardChipTone.greenSolid
-        : isNext
-            ? _InCardChipTone.greenSoft
-            : _InCardChipTone.neutral;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: KiitSpacing.x3),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(KiitRadius.large),
-          border: Border.all(
-            color: active ? KiitColors.brandPrimary : KiitColors.border,
-            width: active ? 0 : 1,
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(KiitSpacing.x4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: KiitSpacing.x2,
-                runSpacing: KiitSpacing.x2,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  _TimeBadge(
-                    startTime: _formatTime(item.startTime),
-                    endTime: _formatTime(item.endTime),
-                    active: active,
-                  ),
-                  if (active)
-                    const _InCardChip(
-                      label: 'Now',
-                      icon: Icons.bolt_rounded,
-                      tone: _InCardChipTone.greenSolid,
-                    )
-                  else if (isNext)
-                    const _InCardChip(
-                      label: 'Next',
-                      icon: Icons.schedule_rounded,
-                      tone: _InCardChipTone.greenSoft,
-                    )
-                  else
-                    _InCardChip(
-                      label: state == _ClassState.completed
-                          ? 'Completed'
-                          : 'Upcoming',
-                      icon: state == _ClassState.completed
-                          ? Icons.check_circle_outline_rounded
-                          : Icons.event_available_outlined,
-                      tone: chipTone,
-                    ),
-                ],
-              ),
-              const SizedBox(height: KiitSpacing.x4),
-              Text(
-                item.courseName,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      color: primaryText,
-                    ),
-              ),
-              const SizedBox(height: KiitSpacing.x3),
-              Wrap(
-                spacing: KiitSpacing.x3,
-                runSpacing: KiitSpacing.x2,
-                children: [
-                  _ClassMeta(
-                    icon: Icons.school_outlined,
-                    label: item.courseCode,
-                    color: secondaryText,
-                  ),
-                  _ClassMeta(
-                    icon: Icons.groups_outlined,
-                    label: 'Sec ${item.sectionCode}',
-                    color: secondaryText,
-                  ),
-                  _ClassMeta(
-                    icon: Icons.meeting_room_outlined,
-                    label: 'Room ${item.room}',
-                    color: strongText,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _formatTime(String value) {
-    if (value.length >= 5) {
-      return value.substring(0, 5);
-    }
-    return value;
-  }
-}
-
-class _TimeBadge extends StatelessWidget {
-  const _TimeBadge({
-    required this.startTime,
-    required this.endTime,
-    required this.active,
-  });
-
-  final String startTime;
-  final String endTime;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: KiitSpacing.x3,
-        vertical: KiitSpacing.x2,
-      ),
-      decoration: BoxDecoration(
-        color: active
-            ? Colors.white.withValues(alpha: 0.16)
-            : KiitColors.brandPrimarySoft,
-        borderRadius: BorderRadius.circular(KiitRadius.small),
-        border: Border.all(
-          color: active
-              ? Colors.white.withValues(alpha: 0.24)
-              : KiitColors.brandPrimary.withValues(alpha: 0.16),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.access_time_rounded,
-            size: 15,
-            color: active ? Colors.white : KiitColors.brandPrimaryStrong,
-          ),
-          const SizedBox(width: KiitSpacing.x1),
-          Text(
-            '$startTime - $endTime',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: active ? Colors.white : KiitColors.brandPrimaryStrong,
-                  fontWeight: FontWeight.w900,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-enum _InCardChipTone { greenSolid, greenSoft, neutral }
-
-class _InCardChip extends StatelessWidget {
-  const _InCardChip({
-    required this.label,
-    required this.icon,
-    required this.tone,
-  });
-
-  final String label;
-  final IconData icon;
-  final _InCardChipTone tone;
-
-  @override
-  Widget build(BuildContext context) {
-    final foreground = switch (tone) {
-      _InCardChipTone.greenSolid => Colors.white,
-      _InCardChipTone.greenSoft => KiitColors.brandPrimaryStrong,
-      _InCardChipTone.neutral => KiitColors.textSecondary,
-    };
-    final background = switch (tone) {
-      _InCardChipTone.greenSolid => Colors.white.withValues(alpha: 0.18),
-      _InCardChipTone.greenSoft => KiitColors.brandPrimarySoft,
-      _InCardChipTone.neutral => KiitColors.background,
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: KiitSpacing.x3,
-        vertical: KiitSpacing.x2,
-      ),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(KiitRadius.small),
-        border: Border.all(color: foreground.withValues(alpha: 0.16)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: foreground),
-          const SizedBox(width: KiitSpacing.x1),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: foreground,
-                  fontWeight: FontWeight.w900,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CurrentClassCard extends StatelessWidget {
-  const _CurrentClassCard({
-    required this.item,
-    required this.state,
-    required this.now,
-  });
-
-  final TimetableItem item;
-  final _ClassState state;
-  final DateTime now;
-
-  @override
-  Widget build(BuildContext context) {
-    final isNow = state == _ClassState.now;
-    final minutes = isNow
-        ? _minutesLeft(item.endTime, now)
-        : _minutesUntil(item.startTime, now);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: KiitColors.brandPrimary,
-        borderRadius: BorderRadius.circular(KiitRadius.large),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(KiitSpacing.x5),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final compact = constraints.maxWidth < 330;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: KiitSpacing.x2,
-                  runSpacing: KiitSpacing.x2,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    StatusChip(
-                      label: isNow ? 'Happening now' : 'Next class',
-                      tone: StatusTone.success,
-                      icon: isNow ? Icons.bolt_rounded : Icons.schedule_rounded,
-                    ),
-                    Text(
-                      isNow
-                          ? '${minutes.clamp(0, 999)} min left'
-                          : 'Starts in ${minutes.clamp(0, 999)} min',
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                          ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: KiitSpacing.x4),
-                Text(
-                  item.courseName,
-                  maxLines: compact ? 3 : 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                      ),
-                ),
-                const SizedBox(height: KiitSpacing.x3),
-                Wrap(
-                  spacing: KiitSpacing.x4,
-                  runSpacing: KiitSpacing.x2,
-                  children: [
-                    _HeroMeta(
-                      icon: Icons.schedule_rounded,
-                      label: '${item.startTime} - ${item.endTime}',
-                    ),
-                    _HeroMeta(
-                      icon: Icons.meeting_room_outlined,
-                      label: item.room,
-                    ),
-                    _HeroMeta(
-                      icon: Icons.groups_outlined,
-                      label: item.sectionCode,
-                    ),
-                  ],
-                ),
               ],
-            );
-          },
+            ),
+          ),
         ),
       ),
     );
   }
-
-  int _minutesUntil(String startTime, DateTime now) {
-    final start = _minutes(startTime);
-    final current = now.hour * 60 + now.minute;
-    return start - current;
-  }
-
-  int _minutesLeft(String endTime, DateTime now) {
-    final end = _minutes(endTime);
-    final current = now.hour * 60 + now.minute;
-    return end - current;
-  }
-
-  int _minutes(String value) {
-    final parts = value.split(':');
-    return int.parse(parts[0]) * 60 + int.parse(parts[1]);
-  }
 }
 
-class _ClassMeta extends StatelessWidget {
-  const _ClassMeta({
-    required this.icon,
-    required this.label,
-    required this.color,
-  });
+class _Meta extends StatelessWidget {
+  const _Meta({required this.icon, required this.label, required this.color});
 
   final IconData icon;
   final String label;
@@ -694,42 +464,21 @@ class _ClassMeta extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: KiitSpacing.x1),
-        Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 15, color: color),
         ),
-      ],
-    );
-  }
-}
-
-class _HeroMeta extends StatelessWidget {
-  const _HeroMeta({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 15, color: Colors.white.withValues(alpha: 0.9)),
-        const SizedBox(width: KiitSpacing.x1),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-              ),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: color, fontWeight: FontWeight.w700, fontFeatures: tabularFigures)),
         ),
       ],
     );

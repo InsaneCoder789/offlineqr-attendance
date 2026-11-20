@@ -75,9 +75,8 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/branding/kiit_logo.png
-    - assets/branding/kaya_icon.png
-    - assets/branding/app_icon/kiit_splash_mark_1024.png
+    - assets/branding/offlineqr_logo.png
+    - assets/branding/app_icon/offlineqr_splash_mark_1024.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

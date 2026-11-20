@@ -3,8 +3,11 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 import 'core/sync/bootstrap_models.dart';
-import 'ui/kiit_components.dart';
-import 'ui/kiit_theme.dart';
+import 'ui/dark_kit.dart';
+import 'ui/dark_kit_extra_b.dart';
+import 'ui/product_components.dart';
+import 'ui/product_theme.dart';
+import 'ui/state_views.dart';
 
 class AttendanceApp extends StatelessWidget {
   const AttendanceApp({super.key});
@@ -12,9 +15,9 @@ class AttendanceApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'KIIT Attendance',
+      title: 'OfflineQR',
       debugShowCheckedModeBanner: false,
-      theme: buildKiitTheme(),
+      theme: buildProductTheme(),
       home: const WebAttendanceDashboard(),
     );
   }
@@ -81,7 +84,7 @@ class _WebAttendanceDashboardState extends State<WebAttendanceDashboard> {
     final current = payload;
     return Scaffold(
       appBar: AppBar(
-        title: const KiitLogo(height: 34),
+        title: const ProductLogo(height: 34),
         actions: [
           TextButton(
             onPressed: loading ? null : load,
@@ -117,19 +120,39 @@ class _LoadingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (loading) const CircularProgressIndicator(),
-        if (!loading) const Text('Backend data is not loaded yet.'),
-        if (error != null) ...[
-          const SizedBox(height: 12),
-          Text(error!, textAlign: TextAlign.center),
-        ],
-        const SizedBox(height: 16),
-        FilledButton(
-            onPressed: loading ? null : onRetry, child: const Text('Retry')),
-      ],
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: ProductSpacing.x4),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Center(
+                  child: GlowMark(size: 96, child: ProductLogo(height: 48))),
+              const SizedBox(height: ProductSpacing.x6),
+              if (loading)
+                const StateView.loading(compact: true)
+              else if (error != null)
+                StateView.error(
+                  title: 'Could not load data',
+                  message: error!,
+                  actionLabel: 'Retry',
+                  onAction: onRetry,
+                )
+              else
+                StateView.empty(
+                  title: 'Backend data is not loaded yet.',
+                  message: 'Load it to see courses, attendance and timetable.',
+                  icon: Icons.cloud_download_outlined,
+                  actionLabel: 'Retry',
+                  onAction: onRetry,
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -190,23 +213,27 @@ class _WebDashboardContent extends StatelessWidget {
 
     return ListView(
       children: [
-        KiitCard(
-          color: KiitColors.brandPrimarySubtle,
+        NeonHero(
+          padding: const EdgeInsets.all(ProductSpacing.x5),
           child: Row(
             children: [
-              const KiitLogo(height: 42),
-              const SizedBox(width: KiitSpacing.x4),
+              const Flexible(flex: 0, child: ProductLogo(height: 42)),
+              const SizedBox(width: ProductSpacing.x4),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       payload.student.displayName,
-                      style: Theme.of(context).textTheme.headlineSmall,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    const SizedBox(height: KiitSpacing.x1),
+                    const SizedBox(height: ProductSpacing.x1),
                     Text(
                       payload.student.rollNumber,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
@@ -215,7 +242,7 @@ class _WebDashboardContent extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: KiitSpacing.x5),
+        const SizedBox(height: ProductSpacing.x5),
         Wrap(
           spacing: 12,
           runSpacing: 12,
@@ -233,7 +260,7 @@ class _WebDashboardContent extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: KiitSpacing.x6),
+        const SizedBox(height: ProductSpacing.x6),
         Row(
           children: [
             Expanded(
@@ -248,7 +275,7 @@ class _WebDashboardContent extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: KiitSpacing.x3),
+        const SizedBox(height: ProductSpacing.x3),
         if (courseSummaries.isEmpty)
           const EmptyState(
             title: 'No enrolled courses',
@@ -260,20 +287,22 @@ class _WebDashboardContent extends StatelessWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: courseSummaries.length,
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
               maxCrossAxisExtent: 300,
-              mainAxisExtent: 172,
-              crossAxisSpacing: KiitSpacing.x3,
-              mainAxisSpacing: KiitSpacing.x3,
+              mainAxisExtent: MediaQuery.textScalerOf(context)
+                  .scale(172)
+                  .clamp(172.0, 420.0),
+              crossAxisSpacing: ProductSpacing.x3,
+              mainAxisSpacing: ProductSpacing.x3,
             ),
             itemBuilder: (context, index) => _CourseSummaryCard(
               summary: courseSummaries[index],
             ),
           ),
-        const SizedBox(height: KiitSpacing.x6),
+        const SizedBox(height: ProductSpacing.x6),
         Text('Today\'s Timetable',
             style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: KiitSpacing.x3),
+        const SizedBox(height: ProductSpacing.x3),
         if (todayEntries.isEmpty)
           const EmptyState(
             title: 'No class today',
@@ -283,7 +312,7 @@ class _WebDashboardContent extends StatelessWidget {
         else
           for (final entry in todayEntries)
             Padding(
-              padding: const EdgeInsets.only(bottom: KiitSpacing.x2),
+              padding: const EdgeInsets.only(bottom: ProductSpacing.x2),
               child: _TimetableRow(
                 entry: entry,
                 offering: offeringsById[entry.courseOfferingId],
@@ -291,9 +320,9 @@ class _WebDashboardContent extends StatelessWidget {
                 sectionsById: sectionsById,
               ),
             ),
-        const SizedBox(height: KiitSpacing.x6),
+        const SizedBox(height: ProductSpacing.x6),
         Text('Recent History', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: KiitSpacing.x3),
+        const SizedBox(height: ProductSpacing.x3),
         if (payload.attendanceRecords.isEmpty)
           const EmptyState(
             title: 'No attendance captured yet',
@@ -303,12 +332,15 @@ class _WebDashboardContent extends StatelessWidget {
         else
           for (final record in payload.attendanceRecords.reversed.take(6))
             Padding(
-              padding: const EdgeInsets.only(bottom: KiitSpacing.x2),
-              child: KiitCard(
-                padding: const EdgeInsets.all(KiitSpacing.x3),
+              padding: const EdgeInsets.only(bottom: ProductSpacing.x2),
+              child: ProductCard(
+                padding: const EdgeInsets.all(ProductSpacing.x3),
                 child: Row(
                   children: [
-                    Expanded(child: Text(record.recordedAt)),
+                    Expanded(
+                        child: Text(record.recordedAt,
+                            maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    const SizedBox(width: ProductSpacing.x2),
                     StatusChip(
                       label: record.status,
                       tone: record.status == 'PRESENT'
@@ -332,7 +364,7 @@ class _CourseSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasRecords = summary.total > 0;
-    return KiitCard(
+    return ProductCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -346,18 +378,27 @@ class _CourseSummaryCard extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
-              StatusChip(label: summary.code, tone: StatusTone.neutral),
+              const SizedBox(width: ProductSpacing.x2),
+              Flexible(
+                  flex: 0,
+                  child: StatusChip(
+                      label: summary.code, tone: StatusTone.neutral)),
             ],
           ),
-          const SizedBox(height: KiitSpacing.x2),
-          Text(summary.section, style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: ProductSpacing.x2),
+          Text(summary.section,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium),
           const Spacer(),
           AttendanceProgress(percentage: summary.percentage),
-          const SizedBox(height: KiitSpacing.x3),
+          const SizedBox(height: ProductSpacing.x3),
           Text(
             hasRecords
                 ? '${summary.present} / ${summary.total} present · ${summary.percentage.toStringAsFixed(1)}%'
                 : 'Awaiting first attendance record',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ],
@@ -383,38 +424,53 @@ class _TimetableRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final course = offering == null ? null : coursesById[offering!.courseId];
     final section = offering == null ? null : sectionsById[offering!.sectionId];
-    return KiitCard(
-      padding: const EdgeInsets.all(KiitSpacing.x3),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 116,
-            child: Text(
-              '${_clock(entry.startTime)} - ${_clock(entry.endTime)}',
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-          ),
-          Expanded(
-            child: Column(
+    final time = '${_clock(entry.startTime)} - ${_clock(entry.endTime)}';
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          course?.name ?? 'Scheduled class',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: ProductSpacing.x1),
+        Text(
+          [
+            if (course != null) course.code,
+            if (section != null) section.code,
+            entry.room,
+          ].join(' · '),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      ],
+    );
+    return ProductCard(
+      padding: const EdgeInsets.all(ProductSpacing.x3),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final timeText =
+              Text(time, style: Theme.of(context).textTheme.labelLarge);
+          if (c.maxWidth < 360) {
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  course?.name ?? 'Scheduled class',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: KiitSpacing.x1),
-                Text(
-                  [
-                    if (course != null) course.code,
-                    if (section != null) section.code,
-                    entry.room,
-                  ].join(' · '),
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
+                timeText,
+                const SizedBox(height: ProductSpacing.x1),
+                details
               ],
-            ),
-          ),
-        ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 116, child: timeText),
+              Expanded(child: details),
+            ],
+          );
+        },
       ),
     );
   }
@@ -431,24 +487,27 @@ class _Metric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 220,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: KiitColors.surface,
-          border: Border.all(color: KiitColors.border),
-          borderRadius: BorderRadius.circular(KiitRadius.large),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              Text(value, style: Theme.of(context).textTheme.headlineSmall),
-            ],
-          ),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 140, maxWidth: 220),
+      child: GlassCard(
+        padding: const EdgeInsets.all(16),
+        radius: 22,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 8),
+            Text(value,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineSmall
+                    ?.copyWith(letterSpacing: -0.5)),
+          ],
         ),
       ),
     );

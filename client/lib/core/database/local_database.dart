@@ -233,7 +233,7 @@ class LocalAttendanceDatabase {
 
   static Future<LocalAttendanceDatabase> openDefault() async {
     final directory = await getApplicationSupportDirectory();
-    final dbPath = p.join(directory.path, 'kiit_attendance_goal02.sqlite');
+    final dbPath = p.join(directory.path, 'offlineqr_attendance_goal02.sqlite');
     return LocalAttendanceDatabase(sqlite3.open(dbPath))..migrate();
   }
 
@@ -1503,5 +1503,5 @@ class LocalAttendanceDatabase {
 
 Future<bool> localDatabaseFileExists() async {
   final directory = await getApplicationSupportDirectory();
-  return File(p.join(directory.path, 'kiit_attendance_goal02.sqlite')).exists();
+  return File(p.join(directory.path, 'offlineqr_attendance_goal02.sqlite')).exists();
 }

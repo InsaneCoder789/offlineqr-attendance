@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>KIIT Attendance</string>
+	<string>OfflineQR</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>KIITAttendance</string>
+	<string>OfflineQR</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -57,7 +57,7 @@
 	</array>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>in.ac.kiit.offlineqrattendance.sync.periodic</string>
+		<string>com.offlineqr.attendance.sync.periodic</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>

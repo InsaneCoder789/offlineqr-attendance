@@ -7,7 +7,7 @@ import 'attendance_proof_sync_service.dart';
 
 const _syncTask = 'attendance-proof-sync';
 const _periodicSyncName =
-    'in.ac.kiit.offlineqrattendance.sync.periodic';
+    'com.offlineqr.attendance.sync.periodic';
 
 @pragma('vm:entry-point')
 void attendanceSyncDispatcher() {

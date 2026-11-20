@@ -32,7 +32,7 @@ void main() {
   });
 
   test('file-backed database supports offline read after restart', () {
-    final directory = Directory.systemTemp.createTempSync('kiit_goal02_');
+    final directory = Directory.systemTemp.createTempSync('offlineqr_goal02_');
     addTearDown(() => directory.deleteSync(recursive: true));
     final dbPath = '${directory.path}/offline.sqlite';
 
@@ -50,7 +50,7 @@ void main() {
   });
 
   test('attendance proof and outbox entry survive restart atomically', () {
-    final directory = Directory.systemTemp.createTempSync('kiit_goal07_');
+    final directory = Directory.systemTemp.createTempSync('offlineqr_goal07_');
     addTearDown(() => directory.deleteSync(recursive: true));
     final dbPath = '${directory.path}/offline.sqlite';
     const now = '2026-08-20T08:10:13Z';

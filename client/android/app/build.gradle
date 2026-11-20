@@ -29,7 +29,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace "in.ac.kiit.offlineqrattendance"
+    namespace "com.offlineqr.attendance"
     compileSdkVersion 36
     // Kept aligned with the scanner and encrypted-storage native plugins.
     ndkVersion "28.2.13676358"
@@ -48,7 +48,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "in.ac.kiit.offlineqrattendance"
+        applicationId "com.offlineqr.attendance"
         // You can update the following values to match your application needs.
         // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
         // API 23 is the secure compatibility floor for encrypted device-bound state.

@@ -3,7 +3,7 @@
     <uses-permission android:name="android.permission.CAMERA" />
 
     <application
-        android:label="KIIT Attendance"
+        android:label="OfflineQR"
         android:name="${applicationName}"
         android:allowBackup="false"
         android:fullBackupContent="false"

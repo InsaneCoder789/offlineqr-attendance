@@ -1,4 +1,4 @@
-package `in`.ac.kiit.offlineqrattendance
+package com.offlineqr.attendance
 
 import io.flutter.embedding.android.FlutterActivity
 

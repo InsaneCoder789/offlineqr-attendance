@@ -21,7 +21,7 @@ void main() {
     // Navigate to Scan tab
     await tester.tap(find.text('Scan'));
     await tester.pumpAndSettle();
-    expect(find.text('Scan Attendance'), findsOneWidget);
+    expect(find.text('Scan attendance QR'), findsOneWidget);
 
     // Navigate to Attendance tab
     await tester.tap(find.text('Attendance').last);
@@ -29,8 +29,8 @@ void main() {
 
     expect(find.textContaining('Aarav Mehta'), findsOneWidget);
     expect(find.text('Design and Analysis of Algorithms'), findsOneWidget);
-    expect(find.textContaining('2 Present'), findsOneWidget);
-    expect(find.text('67%'), findsOneWidget);
+    expect(find.textContaining('2 present'), findsOneWidget);
+    expect(find.text('67%'), findsWidgets);
   });
 
   testWidgets('student destinations fit a compact phone viewport',

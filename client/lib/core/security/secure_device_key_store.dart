@@ -16,7 +16,7 @@ class SecureStorageDeviceKeyStore implements DeviceKeyStore {
               iOptions: IOSOptions(
                 accessibility: KeychainAccessibility.unlocked_this_device,
                 synchronizable: false,
-                accountName: 'in.ac.kiit.attendance.device-key',
+                accountName: 'com.offlineqr.attendance.device-key',
               ),
             ),
         _storageKey = storageKey;

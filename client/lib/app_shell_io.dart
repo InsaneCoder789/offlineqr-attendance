@@ -10,8 +10,10 @@ import 'core/sync/attendance_proof_sync_service.dart';
 import 'core/sync/bootstrap_sync_service.dart';
 import 'features/student_auth/student_login_page.dart';
 import 'features/student_shell/student_home.dart';
-import 'ui/kiit_components.dart';
-import 'ui/kiit_theme.dart';
+import 'ui/dark_kit_extra_b.dart';
+import 'ui/product_components.dart';
+import 'ui/product_theme.dart';
+import 'ui/state_views.dart';
 
 class AttendanceApp extends StatefulWidget {
   const AttendanceApp({super.key});
@@ -21,7 +23,7 @@ class AttendanceApp extends StatefulWidget {
 }
 
 class _AttendanceAppState extends State<AttendanceApp> {
-  late final Future<LocalAttendanceDatabase> _databaseFuture;
+  late Future<LocalAttendanceDatabase> _databaseFuture;
   late final StudentAuthStore _authStore;
   LocalAttendanceDatabase? _database;
 
@@ -29,10 +31,18 @@ class _AttendanceAppState extends State<AttendanceApp> {
   void initState() {
     super.initState();
     _authStore = StudentAuthStore();
-    _databaseFuture = LocalAttendanceDatabase.openDefault().then((database) {
+    _databaseFuture = _openDatabase();
+  }
+
+  Future<LocalAttendanceDatabase> _openDatabase() {
+    return LocalAttendanceDatabase.openDefault().then((database) {
       _database = database;
       return database;
     });
+  }
+
+  void _retryOpen() {
+    setState(() => _databaseFuture = _openDatabase());
   }
 
   @override
@@ -44,34 +54,21 @@ class _AttendanceAppState extends State<AttendanceApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'KIIT Attendance',
+      title: 'OfflineQR',
       debugShowCheckedModeBanner: false,
-      theme: buildKiitTheme(),
+      theme: buildProductTheme(),
       onUnknownRoute: (_) => MaterialPageRoute<void>(
-        builder: (_) => const KiitNotFoundPage(),
+        builder: (_) => const ProductNotFoundPage(),
       ),
       home: FutureBuilder<LocalAttendanceDatabase>(
         future: _databaseFuture,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return const Scaffold(
-              body: SafeArea(
-                child: Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(KiitSpacing.x5),
-                    child: KiitNoticeBanner(
-                      title: 'Attendance storage unavailable',
-                      message:
-                          'The app could not open its protected local records. Restart the app before attempting attendance.',
-                      tone: StatusTone.error,
-                    ),
-                  ),
-                ),
-              ),
-            );
+            return StorageUnavailableScreen(onRetry: _retryOpen);
           }
-          if (!snapshot.hasData) {
-            return const _AppLaunchScreen();
+          if (snapshot.connectionState != ConnectionState.done ||
+              !snapshot.hasData) {
+            return const AppLaunchScreen();
           }
           return StudentAppShell(
             database: snapshot.data!,
@@ -231,7 +228,7 @@ class _StudentAppShellState extends State<StudentAppShell>
   @override
   Widget build(BuildContext context) {
     if (checkingSession) {
-      return const _AppLaunchScreen();
+      return const AppLaunchScreen();
     }
     if (!loggedIn) {
       return StudentLoginPage(
@@ -259,44 +256,120 @@ class _StudentAppShellState extends State<StudentAppShell>
   }
 }
 
-class _AppLaunchScreen extends StatelessWidget {
-  const _AppLaunchScreen();
+/// Branded splash shown while the local records open / the session restores.
+class AppLaunchScreen extends StatelessWidget {
+  const AppLaunchScreen({super.key, this.message = 'Opening your records'});
+
+  final String message;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: KiitColors.surface,
+      backgroundColor: ProductColors.background,
+      body: Stack(
+        children: [
+          const Positioned.fill(
+            child: AmbientGlow(alignment: Alignment(0, -0.15), opacity: 0.26),
+          ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(ProductSpacing.x5),
+                child: Semantics(
+                  liveRegion: true,
+                  label: 'Loading. $message',
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const _LaunchMark(),
+                      const SizedBox(height: ProductSpacing.x6),
+                      Text(
+                        'OfflineQR',
+                        textAlign: TextAlign.center,
+                        style:
+                            Theme.of(context).textTheme.displaySmall?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -1.2,
+                                ),
+                      ),
+                      const SizedBox(height: ProductSpacing.x5),
+                      const SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      ),
+                      const SizedBox(height: ProductSpacing.x3),
+                      Text(
+                        '$message...',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown when the protected local database cannot be opened.
+class StorageUnavailableScreen extends StatelessWidget {
+  const StorageUnavailableScreen({super.key, this.onRetry});
+
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: ProductColors.background,
       body: SafeArea(
         child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 104,
-                height: 104,
-                padding: const EdgeInsets.all(KiitSpacing.x4),
-                decoration: BoxDecoration(
-                  color: KiitColors.brandPrimarySubtle,
-                  borderRadius: BorderRadius.circular(KiitRadius.hero),
-                  border: Border.all(color: KiitColors.border),
-                ),
-                child: Image.asset(
-                  'assets/branding/app_icon/kiit_splash_mark_1024.png',
-                ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(ProductSpacing.x5),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: StateView.error(
+                title: 'Attendance storage unavailable',
+                message:
+                    'The app could not open its protected local records. Try again, or restart the app before attempting attendance.',
+                actionLabel: 'Try again',
+                onAction: onRetry,
               ),
-              const SizedBox(height: KiitSpacing.x5),
-              Text(
-                'KIIT Attendance',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: KiitSpacing.x4),
-              const SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(strokeWidth: 2.5),
-              ),
-            ],
+            ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LaunchMark extends StatelessWidget {
+  const _LaunchMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return GlowMark(
+      size: 120,
+      child: Container(
+        width: 112,
+        height: 112,
+        padding: const EdgeInsets.all(ProductSpacing.x4),
+        decoration: BoxDecoration(
+          color: ProductColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(
+              color: ProductColors.brandPrimary.withValues(alpha: 0.4)),
+        ),
+        child: Image.asset(
+          'assets/branding/app_icon/offlineqr_splash_mark_1024.png',
+          errorBuilder: (context, error, stack) => const Icon(
+              Icons.qr_code_2_rounded,
+              size: 56,
+              color: ProductColors.brandPrimary),
         ),
       ),
     );

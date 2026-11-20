@@ -9,7 +9,7 @@ import workmanager_apple
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     WorkmanagerPlugin.registerPeriodicTask(
-      withIdentifier: "in.ac.kiit.offlineqrattendance.sync.periodic"
+      withIdentifier: "com.offlineqr.attendance.sync.periodic"
     )
     GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)

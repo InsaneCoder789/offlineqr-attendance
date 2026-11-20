@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show HttpDate;
 import 'dart:math';
 
 import 'package:http/http.dart' as http;
@@ -82,7 +83,13 @@ class AttendanceProofSyncService {
           )
           .timeout(apiRequestTimeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        _markBatchRetry(entries, 'HTTP_${response.statusCode}');
+        _markBatchRetry(
+          entries,
+          'HTTP_${response.statusCode}',
+          minDelay: response.statusCode == 429
+              ? _parseRetryAfter(response.headers['retry-after'])
+              : null,
+        );
         return AttendanceProofSyncReport(
           submitted: entries.length,
           accepted: 0,
@@ -210,26 +217,45 @@ class AttendanceProofSyncService {
     return 0;
   }
 
-  void _markBatchRetry(List<AttendanceProofOutboxEntry> entries, String code) {
+  /// Parses a Retry-After header given as delta-seconds or an HTTP date.
+  Duration? _parseRetryAfter(String? value) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    final seconds = int.tryParse(trimmed);
+    if (seconds != null) {
+      return seconds <= 0 ? null : Duration(seconds: seconds);
+    }
+    try {
+      final delay = HttpDate.parse(trimmed).difference(DateTime.now().toUtc());
+      return delay.isNegative || delay == Duration.zero ? null : delay;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _markBatchRetry(
+    List<AttendanceProofOutboxEntry> entries,
+    String code, {
+    Duration? minDelay,
+  }) {
     final now = canonicalUtcTimestamp(DateTime.now());
     for (final entry in entries) {
       database.markProofRetryPending(
         proofId: entry.proofId,
-        nextAttemptAt: _nextAttemptAt(entry.attemptCount + 1),
+        nextAttemptAt:
+            _nextAttemptAt(entry.attemptCount + 1, minDelay: minDelay),
         now: now,
         errorCode: code,
       );
     }
   }
 
-  String _nextAttemptAt(int attemptCount) {
+  String _nextAttemptAt(int attemptCount, {Duration? minDelay}) {
     final cappedAttempt = attemptCount.clamp(1, 6);
     final baseSeconds = 5 * (1 << (cappedAttempt - 1));
     final jitterSeconds = _random.nextInt(baseSeconds + 1);
-    return canonicalUtcTimestamp(
-      DateTime.now()
-          .toUtc()
-          .add(Duration(seconds: baseSeconds + jitterSeconds)),
-    );
+    var delay = Duration(seconds: baseSeconds + jitterSeconds);
+    if (minDelay != null && minDelay > delay) delay = minDelay;
+    return canonicalUtcTimestamp(DateTime.now().toUtc().add(delay));
   }
 }

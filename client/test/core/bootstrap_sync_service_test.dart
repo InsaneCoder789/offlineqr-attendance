@@ -20,7 +20,7 @@ void main() {
       request.response.close();
     });
 
-    final directory = Directory.systemTemp.createTempSync('kiit_sync_goal02_');
+    final directory = Directory.systemTemp.createTempSync('offlineqr_sync_goal02_');
     addTearDown(() => directory.deleteSync(recursive: true));
     final dbPath = '${directory.path}/offline.sqlite';
 
