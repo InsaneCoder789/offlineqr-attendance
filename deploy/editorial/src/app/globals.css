@@ -1,0 +1,7 @@
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:#f8f9fa;color:#202b27;font-family:Arial,sans-serif}
+a{color:inherit}
+button,input,textarea{font:inherit}
+button{color:inherit}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}

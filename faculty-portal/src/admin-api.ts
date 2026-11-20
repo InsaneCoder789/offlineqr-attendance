@@ -71,7 +71,7 @@ export type DeviceActivationQr = {
 const apiBase = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000";
 
 function csrfHeaders(init?: RequestInit): HeadersInit {
-  const csrf = typeof document === "undefined" ? "" : document.cookie.split("; ").find((item) => item.startsWith("kiit_faculty_csrf="))?.split("=")[1] ?? "";
+  const csrf = typeof document === "undefined" ? "" : document.cookie.split("; ").find((item) => item.startsWith("offlineqr_faculty_csrf="))?.split("=")[1] ?? "";
   return { "Content-Type": "application/json", ...(init?.method && init.method !== "GET" ? { "X-CSRF-Token": decodeURIComponent(csrf) } : {}) };
 }
 

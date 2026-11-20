@@ -1,9 +1,22 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { downloadRegisterCsv } from "@/lib/register-export";
-import { useSessionEvents } from "@/hooks/useSessionEvents";
-import { ApiRequestError } from "@/api";
+import { downloadRegisterCsv } from "../lib/register-export";
+import { useSessionEvents } from "../hooks/useSessionEvents";
+import { ApiRequestError } from "../api";
+import { classifyPortalError, type PortalError, type PortalErrorKind } from "../lib/portal-errors";
+import {
+  PortalUiProvider,
+  defaultAttestationReason,
+  useAttestationUi,
+  useLoginFields,
+  usePortalUiActions,
+  useProjectorUi,
+  useRegisterFilters,
+  useRosterFilters,
+  type PortalUiActions,
+  type RosterFilter,
+} from "./PortalUiState";
 import {
   attest,
   cachedActiveSession,
@@ -42,9 +55,7 @@ import {
   type RosterStudent,
 } from "../api";
 
-type RosterFilter = "all" | "present" | "pending";
-
-type FacultyPortalState = {
+type PortalDataState = {
   classes: FacultyClass[];
   facultyCourses: FacultyCourse[];
   sessionHistory: FacultySessionRecord[];
@@ -53,28 +64,12 @@ type FacultyPortalState = {
   session: FacultySession | null;
   roster: RosterStudent[];
   facultyIdentity: FacultyIdentity | null;
-  loginEmail: string;
-  loginPassword: string;
   loginLoading: boolean;
   loading: boolean;
   error: string | null;
+  errorKind: PortalErrorKind | null;
+  passwordChangeRequired: boolean;
   online: boolean;
-  projectorMode: boolean;
-  confirmStudent: RosterStudent | null;
-  attestationReason: string;
-  rosterQuery: string;
-  rosterFilter: RosterFilter;
-  registerQuery: string;
-  registerDateFilter: string;
-  setLoginEmail: (value: string) => void;
-  setLoginPassword: (value: string) => void;
-  setProjectorMode: (value: boolean) => void;
-  setConfirmStudent: (value: RosterStudent | null) => void;
-  setAttestationReason: (value: string) => void;
-  setRosterQuery: (value: string) => void;
-  setRosterFilter: (value: RosterFilter) => void;
-  setRegisterQuery: (value: string) => void;
-  setRegisterDateFilter: (value: string) => void;
   submitFacultyLogin: () => Promise<void>;
   switchFaculty: () => Promise<void>;
   updateProfile: (displayName: string, phoneNumber: string | null) => Promise<void>;
@@ -85,13 +80,36 @@ type FacultyPortalState = {
   endSession: () => Promise<void>;
   confirmAttestation: () => Promise<void>;
   exportRegisterCsv: () => void;
+  clearError: () => void;
 };
 
-const FacultyPortalContext = createContext<FacultyPortalState | null>(null);
-const defaultFacultyEmail = "";
-const defaultReason = "Student device failure";
+/** Everything `useFacultyPortal()` historically returned. */
+export type FacultyPortalState = PortalDataState & PortalUiActions & {
+  loginEmail: string;
+  loginPassword: string;
+  projectorMode: boolean;
+  confirmStudent: RosterStudent | null;
+  attestationReason: string;
+  rosterQuery: string;
+  rosterFilter: RosterFilter;
+  registerQuery: string;
+  registerDateFilter: string;
+  thresholdPercent: number;
+};
+
+const FacultyPortalContext = createContext<PortalDataState | null>(null);
 
 export function FacultyPortalProvider({ children }: { children: React.ReactNode }) {
+  return (
+    <PortalUiProvider>
+      <FacultyPortalDataProvider>{children}</FacultyPortalDataProvider>
+    </PortalUiProvider>
+  );
+}
+
+function FacultyPortalDataProvider({ children }: { children: React.ReactNode }) {
+  // Stable actions only: this provider must not re-render when UI fields change.
+  const ui = usePortalUiActions();
   const [classes, setClasses] = useState<FacultyClass[]>([]);
   const [facultyCourses, setFacultyCourses] = useState<FacultyCourse[]>([]);
   const [sessionHistory, setSessionHistory] = useState<FacultySessionRecord[]>([]);
@@ -100,23 +118,49 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
   const [session, setSession] = useState<FacultySession | null>(null);
   const [roster, setRoster] = useState<RosterStudent[]>([]);
   const [facultyIdentity, setFacultyIdentity] = useState<FacultyIdentity | null>(null);
-  const [loginEmail, setLoginEmail] = useState(defaultFacultyEmail);
-  const [loginPassword, setLoginPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   // Read through a ref so refreshActiveSession stays stable and the live-update
   // socket is not torn down every time a page-level load toggles `loading`.
   const loadingRef = useRef(false);
   useEffect(() => { loadingRef.current = loading; }, [loading]);
-  const [error, setError] = useState<string | null>(null);
+  const [portalError, setPortalError] = useState<PortalError | null>(null);
+  const [passwordChangeFlag, setPasswordChangeFlag] = useState(false);
   const [online, setOnline] = useState(true);
-  const [projectorMode, setProjectorMode] = useState(false);
-  const [confirmStudent, setConfirmStudent] = useState<RosterStudent | null>(null);
-  const [attestationReason, setAttestationReason] = useState(defaultReason);
-  const [rosterQuery, setRosterQuery] = useState("");
-  const [rosterFilter, setRosterFilter] = useState<RosterFilter>("all");
-  const [registerQuery, setRegisterQuery] = useState("");
-  const [registerDateFilter, setRegisterDateFilter] = useState("all");
+  const error = portalError?.message ?? null;
+  const errorKind = portalError?.kind ?? null;
+  const setError = useCallback((message: string | null) => {
+    setPortalError(message ? { kind: "generic", message } : null);
+  }, []);
+
+  const clearError = useCallback(() => setPortalError(null), []);
+
+  const resetWorkspace = useCallback(() => {
+    clearFacultyIdentity();
+    clearCachedActiveSession();
+    setFacultyIdentity(null);
+    setClasses([]);
+    setFacultyCourses([]);
+    setSessionHistory([]);
+    setSelectedRegisterOfferingId(null);
+    setRegister(null);
+    setSession(null);
+    setRoster([]);
+    setPasswordChangeFlag(false);
+    ui.setProjectorMode(false);
+  }, [ui]);
+
+  /** Records a failure with its category; expired sessions return to sign-in. */
+  const reportFailure = useCallback((exception: unknown, fallback: string): PortalError => {
+    const failure = classifyPortalError(exception, fallback, typeof navigator === "undefined" || navigator.onLine);
+    if (failure.kind === "session_expired") {
+      resetWorkspace();
+    } else if (failure.kind === "password_change_required") {
+      setPasswordChangeFlag(true);
+    }
+    setPortalError(failure);
+    return failure;
+  }, [resetWorkspace]);
 
   const defaultRegisterOfferingId = useCallback((courseList = facultyCourses, classList = classes) => {
     return courseList[0]?.course_offering_id ?? classList[0]?.course_offering_id ??
@@ -131,7 +175,7 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     try {
       setRegister(await fetchFacultyRegister(courseOfferingId));
     } catch (exception) {
-      setError(exception instanceof Error ? exception.message : "Register unavailable");
+      reportFailure(exception, "Register unavailable");
     } finally {
       setLoading(false);
     }
@@ -179,16 +223,19 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
         clearCachedActiveSession();
       }
     } catch (exception) {
-      setError(exception instanceof Error ? exception.message : "Unable to sync");
-      setClasses(cachedTodayClasses());
-      setFacultyCourses(cachedFacultyCourses());
-      setSessionHistory(cachedSessionHistory());
+      const failure = reportFailure(exception, "Unable to sync");
+      if (failure.kind !== "session_expired") {
+        setClasses(cachedTodayClasses());
+        setFacultyCourses(cachedFacultyCourses());
+        setSessionHistory(cachedSessionHistory());
+      }
     } finally {
       setLoading(false);
     }
-  }, [defaultRegisterOfferingId, selectedRegisterOfferingId]);
+  }, [defaultRegisterOfferingId, reportFailure, selectedRegisterOfferingId]);
 
   const submitFacultyLogin = useCallback(async () => {
+    const { loginEmail, loginPassword } = ui.read();
     const email = loginEmail.trim().toLowerCase();
     if (!email || !loginPassword) {
       setError("Enter your Institution faculty email and password");
@@ -199,15 +246,18 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     try {
       const identity = await loginFaculty(email, loginPassword);
       setFacultyIdentity(identity);
-      setLoginPassword("");
+      setPasswordChangeFlag(identity.must_change_password);
+      ui.setLoginPassword("");
       localStorage.setItem("faculty.lastLogin", email);
-      await refresh();
+      if (!identity.must_change_password) await refresh();
     } catch (exception) {
-      setError(exception instanceof Error ? exception.message : "Faculty login failed");
+      const failure = classifyPortalError(exception, "Faculty login failed", navigator.onLine);
+      // A 401 here means wrong credentials, not an expired session.
+      setPortalError(failure.kind === "session_expired" ? { kind: "generic", message: failure.message } : failure);
     } finally {
       setLoginLoading(false);
     }
-  }, [loginEmail, loginPassword, refresh]);
+  }, [refresh, setError, ui]);
 
   const switchFaculty = useCallback(async () => {
     try {
@@ -215,16 +265,9 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     } catch {
       clearFacultyIdentity();
     }
-    clearFacultyIdentity();
-    setFacultyIdentity(null);
-    setClasses([]);
-    setFacultyCourses([]);
-    setSessionHistory([]);
-    setSelectedRegisterOfferingId(null);
-    setRegister(null);
-    setSession(null);
-    setRoster([]);
-  }, []);
+    resetWorkspace();
+    setError(null);
+  }, [resetWorkspace, setError]);
 
   const updateProfile = useCallback(async (displayName: string, phoneNumber: string | null) => {
     setLoading(true);
@@ -232,30 +275,26 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     try {
       setFacultyIdentity(await updateFacultyProfile(displayName, phoneNumber));
     } catch (exception) {
-      setError(exception instanceof Error ? exception.message : "Could not update profile");
+      reportFailure(exception, "Could not update profile");
       throw exception;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [reportFailure, setError]);
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     setLoading(true);
     setError(null);
     try {
       await changeFacultyPassword(currentPassword, newPassword);
-      clearFacultyIdentity();
-      clearCachedActiveSession();
-      setFacultyIdentity(null);
-      setSession(null);
-      setRoster([]);
+      resetWorkspace();
     } catch (exception) {
-      setError(exception instanceof Error ? exception.message : "Could not change password");
+      reportFailure(exception, "Could not change password");
       throw exception;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [reportFailure, resetWorkspace, setError]);
 
   const refreshActiveSession = useCallback(async (sessionId: string | null) => {
     if (!sessionId || loadingRef.current) return;
@@ -269,10 +308,13 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
       }
       setSession(updatedSession);
       setRoster(await fetchRoster(updatedSession.id));
-    } catch {
-      // Keep the active classroom view usable with the last local roster.
+    } catch (exception) {
+      // Keep the active classroom view usable with the last local roster,
+      // but an expired session must still send the user back to sign-in.
+      const failure = classifyPortalError(exception, "", true);
+      if (failure.kind === "session_expired") reportFailure(exception, "Your session has expired.");
     }
-  }, []);
+  }, [reportFailure]);
 
   const start = useCallback(async (courseOfferingId: string) => {
     setLoading(true);
@@ -296,12 +338,12 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
           // Surface the original server error when no prepared session exists.
         }
       }
-      setError(exception instanceof Error ? exception.message : "Session unavailable");
+      reportFailure(exception, "Session unavailable");
       return false;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [reportFailure, setError]);
 
   const endSession = useCallback(async () => {
     if (!session) return;
@@ -316,33 +358,35 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
       }
       setSession(null);
       setRoster([]);
-      setProjectorMode(false);
+      ui.setProjectorMode(false);
     } catch (exception) {
-      setError(exception instanceof Error ? exception.message : "Could not close attendance session");
+      reportFailure(exception, "Could not close attendance session");
     } finally {
       setLoading(false);
     }
-  }, [session]);
+  }, [reportFailure, session, setError, ui]);
 
   const confirmAttestation = useCallback(async () => {
+    const { confirmStudent, attestationReason } = ui.read();
     if (!session || !confirmStudent) return;
     setLoading(true);
     setError(null);
     try {
       await attest(session.id, confirmStudent.student_id, attestationReason);
       setRoster(await fetchRoster(session.id));
-      setConfirmStudent(null);
-      setAttestationReason(defaultReason);
+      ui.setConfirmStudent(null);
+      ui.setAttestationReason(defaultAttestationReason);
     } catch (exception) {
-      setError(exception instanceof Error ? exception.message : "Faculty attestation failed");
+      reportFailure(exception, "Faculty attestation failed");
     } finally {
       setLoading(false);
     }
-  }, [attestationReason, confirmStudent, session]);
+  }, [reportFailure, session, setError, ui]);
 
   const exportRegisterCsv = useCallback(() => {
+    const { registerQuery, registerDateFilter } = ui.read();
     if (register) downloadRegisterCsv(register, registerQuery, registerDateFilter);
-  }, [register, registerDateFilter, registerQuery]);
+  }, [register, ui]);
 
   useEffect(() => {
     setOnline(navigator.onLine);
@@ -368,7 +412,7 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
 
     const savedFacultyLogin = localStorage.getItem("faculty.lastLogin");
     if (savedFacultyLogin) {
-      setLoginEmail(savedFacultyLogin);
+      ui.setLoginEmail(savedFacultyLogin);
     }
     const identity = cachedFacultyIdentity();
     setFacultyIdentity(identity);
@@ -386,12 +430,15 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
       try {
         const verified = await fetchFacultyProfile();
         if (!verified) {
-          clearFacultyIdentity();
-          setFacultyIdentity(null);
+          if (identity) {
+            resetWorkspace();
+            setPortalError({ kind: "session_expired", message: "Your session has expired. Sign in again to continue." });
+          }
           return;
         }
         setFacultyIdentity(verified);
-        await refresh();
+        setPasswordChangeFlag(verified.must_change_password);
+        if (!verified.must_change_password) await refresh();
       } catch {
         // Offline faculty access may display only cached workspace data.
       }
@@ -410,79 +457,17 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
     refreshActiveSession,
   );
 
-  const value = useMemo<FacultyPortalState>(() => ({
-    classes,
-    facultyCourses,
-    sessionHistory,
-    selectedRegisterOfferingId,
-    register,
-    session,
-    roster,
-    facultyIdentity,
-    loginEmail,
-    loginPassword,
-    loginLoading,
-    loading,
-    error,
-    online,
-    projectorMode,
-    confirmStudent,
-    attestationReason,
-    rosterQuery,
-    rosterFilter,
-    registerQuery,
-    registerDateFilter,
-    setLoginEmail,
-    setLoginPassword,
-    setProjectorMode,
-    setConfirmStudent,
-    setAttestationReason,
-    setRosterQuery,
-    setRosterFilter,
-    setRegisterQuery,
-    setRegisterDateFilter,
-    submitFacultyLogin,
-    switchFaculty,
-    updateProfile,
-    changePassword,
-    refresh,
-    refreshRegister,
-    start,
-    endSession,
-    confirmAttestation,
-    exportRegisterCsv,
+  const value = useMemo<PortalDataState>(() => ({
+    classes, facultyCourses, sessionHistory, selectedRegisterOfferingId, register, session, roster,
+    facultyIdentity, loginLoading, loading, error, errorKind,
+    passwordChangeRequired: passwordChangeFlag || Boolean(facultyIdentity?.must_change_password),
+    online, submitFacultyLogin, switchFaculty, updateProfile, changePassword, refresh, refreshRegister,
+    start, endSession, confirmAttestation, exportRegisterCsv, clearError,
   }), [
-    attestationReason,
-    classes,
-    confirmAttestation,
-    confirmStudent,
-    endSession,
-    error,
-    exportRegisterCsv,
-    facultyCourses,
-    facultyIdentity,
-    loading,
-    loginEmail,
-    loginLoading,
-    loginPassword,
-    online,
-    projectorMode,
-    refresh,
-    refreshRegister,
-    register,
-    registerDateFilter,
-    registerQuery,
-    roster,
-    rosterFilter,
-    rosterQuery,
-    selectedRegisterOfferingId,
-    session,
-    sessionHistory,
-    start,
-    submitFacultyLogin,
-    switchFaculty,
-    updateProfile,
-    changePassword,
+    classes, facultyCourses, sessionHistory, selectedRegisterOfferingId, register, session, roster,
+    facultyIdentity, loginLoading, loading, error, errorKind, passwordChangeFlag, online,
+    submitFacultyLogin, switchFaculty, updateProfile, changePassword, refresh, refreshRegister,
+    start, endSession, confirmAttestation, exportRegisterCsv, clearError,
   ]);
 
   return (
@@ -492,8 +477,24 @@ export function FacultyPortalProvider({ children }: { children: React.ReactNode 
   );
 }
 
-export function useFacultyPortal() {
+/** Server-backed data and actions only. Prefer this (plus a UI slice hook) in hot components. */
+export function usePortalData(): PortalDataState {
   const context = useContext(FacultyPortalContext);
-  if (!context) throw new Error("useFacultyPortal must be used inside FacultyPortalProvider");
+  if (!context) throw new Error("usePortalData must be used inside FacultyPortalProvider");
   return context;
+}
+
+/** Compatibility hook: data plus every UI slice. Subscribes to all of them. */
+export function useFacultyPortal(): FacultyPortalState {
+  const data = usePortalData();
+  const actions = usePortalUiActions();
+  const login = useLoginFields();
+  const rosterFilters = useRosterFilters();
+  const registerFilters = useRegisterFilters();
+  const attestation = useAttestationUi();
+  const projector = useProjectorUi();
+  return useMemo(
+    () => ({ ...data, ...actions, ...login, ...rosterFilters, ...registerFilters, ...attestation, ...projector }),
+    [data, actions, login, rosterFilters, registerFilters, attestation, projector],
+  );
 }

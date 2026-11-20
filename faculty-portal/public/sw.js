@@ -1,5 +1,5 @@
-const CACHE_NAME = "offlineqr-faculty-shell-v1";
-const APP_ROUTES = ["/", "/dashboard", "/classes", "/attendance", "/records", "/settings"];
+const CACHE_NAME = "offlineqr-faculty-shell-v2";
+const APP_ROUTES = ["/dashboard", "/classes", "/attendance", "/records", "/settings"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -22,6 +22,7 @@ self.addEventListener("fetch", (event) => {
   if (
     request.method !== "GET" ||
     url.origin !== self.location.origin ||
+    url.pathname === "/" ||
     url.pathname.startsWith("/api/") ||
     url.pathname.startsWith("/_next/webpack-hmr")
   ) {

@@ -1,15 +1,14 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { FacultyPortalProvider } from "../components/FacultyPortalProvider";
-import { FacultyPortalShell } from "../components/FacultyPortalShell";
-import { OfflineRuntime } from "../components/OfflineRuntime";
 import { GeistSans } from "geist/font/sans";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { ProductCacheMigration } from "@/components/ProductCacheMigration";
 
 export const metadata: Metadata = {
-  title: "KIIT Faculty Attendance Portal",
-  description: "Offline-first dynamic QR attendance console for KIIT faculty.",
+  title: { default: "OfflineQR | Attendance, beyond the connection", template: "%s | OfflineQR" },
+  description: "Dynamic QR attendance for institutions. A student app, faculty workspace and device governance console, configured around your institution.",
+  icons: { icon: "/branding/offlineqr-mark.svg" },
 };
 
 export default function RootLayout({
@@ -20,11 +19,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={GeistSans.variable}>
       <body>
-        <OfflineRuntime />
+        <ProductCacheMigration />
         <TooltipProvider>
-          <FacultyPortalProvider>
-            <FacultyPortalShell>{children}</FacultyPortalShell>
-          </FacultyPortalProvider>
+          {children}
           <Toaster position="top-right" richColors />
         </TooltipProvider>
       </body>

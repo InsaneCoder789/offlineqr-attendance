@@ -1,0 +1,16 @@
+.scene{position:absolute;inset:0;pointer-events:none}
+.plate{position:absolute;left:50%;top:60px;transform:translateX(-50%);width:90%;max-width:1440px;aspect-ratio:1505/1045}
+.plate img{object-fit:fill}
+.plate{mask-image:linear-gradient(to right,transparent,#000 5%,#000 95%,transparent),linear-gradient(to bottom,transparent,#000 16%,#000 82%,transparent);mask-composite:intersect}
+.screenLayer,.phoneWindow,.laptopWindow{position:absolute;inset:0}
+.screenLayer{opacity:0;transition:opacity 340ms cubic-bezier(.22,1,.36,1)}
+.active{opacity:1}
+/* Only screen interiors change. Every hardware/background pixel comes from the master. */
+.phoneWindow{clip-path:polygon(13.69% 29.28%,26.31% 30.81%,31.10% 75.12%,16.74% 75.79%)}
+.laptopWindow{clip-path:polygon(49.50% 30.34%,92.95% 26.22%,92.36% 70.05%,47.64% 68.99%)}
+@media(min-width:1700px){.plate{top:70px}}
+@media(max-height:820px) and (min-width:701px){.plate{max-width:1100px;top:65px}}
+@media(max-width:700px){.plate{width:108%;top:calc(50% - 55px);max-width:none}}
+@media(min-width:701px) and (max-width:1000px){.plate{top:calc(50% - 200px)}}
+@media(min-width:701px) and (max-width:1000px) and (max-height:500px){.plate{left:70%;width:60%;top:25px}}
+@media(prefers-reduced-motion:reduce){.screenLayer{transition:none}}

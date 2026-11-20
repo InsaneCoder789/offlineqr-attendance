@@ -7,6 +7,8 @@ const developmentConnections = "http://localhost:8000 ws://localhost:8000 http:/
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  devIndicators: false,
+  outputFileTracingIncludes: { "/api/proposals": ["./server-assets/commercial/*"] },
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
   async headers() {
     return [

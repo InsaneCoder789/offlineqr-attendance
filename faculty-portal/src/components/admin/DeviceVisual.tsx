@@ -1,3 +1,6 @@
+import { Smartphone } from "lucide-react";
+import { cn } from "@/lib/utils";
+
 type DeviceVisualProps = {
   manufacturer?: string | null;
   platform: string;
@@ -13,5 +16,3 @@ export function DeviceVisual({ manufacturer, platform, className = "" }: DeviceV
     </span>
   );
 }
-import { Smartphone } from "lucide-react";
-import { cn } from "@/lib/utils";

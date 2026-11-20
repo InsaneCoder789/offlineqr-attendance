@@ -3,7 +3,7 @@ import type { SessionAuthorization } from "./protocol";
 export const ATTENDANCE_API_BASE = process.env.NEXT_PUBLIC_ATTENDANCE_API_BASE ?? "http://127.0.0.1:8000";
 
 export class ApiRequestError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(public readonly status: number, message: string, public readonly code: string | null = null) {
     super(message);
     this.name = "ApiRequestError";
   }
@@ -161,6 +161,17 @@ export function clearFacultyIdentity(): void {
   clearActiveSession();
 }
 
+export async function throwApiError(response: Response, fallback: string): Promise<never> {
+  const body = await response.json().catch(() => null);
+  const code: string | null = body?.error?.code ?? null;
+  let message: string = body?.error?.message ?? fallback;
+  if (response.status === 429) {
+    const wait = Number(response.headers.get("Retry-After"));
+    if (Number.isFinite(wait) && wait > 0) message = `${message} Try again in ${wait} seconds.`;
+  }
+  throw new ApiRequestError(response.status, message, code ?? (response.status === 429 ? "RATE_LIMITED" : null));
+}
+
 function csrfToken(): string {
   const token = document.cookie
     .split("; ")
@@ -209,7 +220,7 @@ export async function loginFaculty(email: string, password: string): Promise<Fac
       : "Too many sign-in attempts. Try again shortly.");
   }
   if (response.status >= 500) throw new ApiRequestError(response.status, "The attendance service is unavailable. Try again shortly.");
-  if (!response.ok) throw new Error("Unable to sign in with those credentials");
+  if (!response.ok) await throwApiError(response, "Unable to sign in with those credentials");
   const profile = (await response.json()) as FacultyIdentity;
   saveFacultyIdentity(profile);
   return profile;
@@ -223,7 +234,7 @@ export async function logoutFaculty(): Promise<void> {
 export async function fetchFacultyProfile(): Promise<FacultyIdentity | null> {
   const response = await apiFetch("/api/v1/faculty/profile");
   if (response.status === 401) return null;
-  if (!response.ok) throw new Error("Could not restore the faculty session");
+  if (!response.ok) await throwApiError(response, "Could not restore the faculty session");
   const profile = (await response.json()) as FacultyIdentity;
   saveFacultyIdentity(profile);
   return profile;
@@ -234,7 +245,7 @@ export async function updateFacultyProfile(displayName: string, phoneNumber: str
     method: "PATCH",
     body: JSON.stringify({ display_name: displayName, phone_number: phoneNumber }),
   });
-  if (!response.ok) throw new Error("Could not update the faculty profile");
+  if (!response.ok) await throwApiError(response, "Could not update the faculty profile");
   const profile = (await response.json()) as FacultyIdentity;
   saveFacultyIdentity(profile);
   return profile;
@@ -245,12 +256,12 @@ export async function changeFacultyPassword(currentPassword: string, newPassword
     method: "POST",
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   });
-  if (!response.ok) throw new Error("Could not change the password");
+  if (!response.ok) await throwApiError(response, "Could not change the password");
 }
 
 export async function fetchTodayClasses(): Promise<FacultyClass[]> {
   const response = await apiFetch("/api/v1/faculty/classes/today");
-  if (!response.ok) throw new Error("Could not load today's classes");
+  if (!response.ok) await throwApiError(response, "Could not load today's classes");
   const classes = (await response.json()) as FacultyClass[];
   localStorage.setItem("faculty.todayClasses", JSON.stringify(classes));
   return classes;
@@ -262,7 +273,7 @@ export function cachedTodayClasses(): FacultyClass[] {
 
 export async function fetchFacultyCourses(): Promise<FacultyCourse[]> {
   const response = await apiFetch("/api/v1/faculty/courses");
-  if (!response.ok) throw new Error("Could not load assigned courses");
+  if (!response.ok) await throwApiError(response, "Could not load assigned courses");
   const courses = (await response.json()) as FacultyCourse[];
   localStorage.setItem("faculty.courses", JSON.stringify(courses));
   return courses;
@@ -274,7 +285,7 @@ export function cachedFacultyCourses(): FacultyCourse[] {
 
 export async function fetchSessionHistory(): Promise<FacultySessionRecord[]> {
   const response = await apiFetch("/api/v1/faculty/attendance-sessions?limit=50");
-  if (!response.ok) throw new Error("Could not load attendance records");
+  if (!response.ok) await throwApiError(response, "Could not load attendance records");
   const records = (await response.json()) as FacultySessionRecord[];
   localStorage.setItem("faculty.sessionHistory", JSON.stringify(records));
   return records;
@@ -286,7 +297,7 @@ export function cachedSessionHistory(): FacultySessionRecord[] {
 
 export async function fetchFacultyRegister(courseOfferingId: string): Promise<FacultyRegister> {
   const response = await apiFetch(`/api/v1/faculty/course-offerings/${courseOfferingId}/register`);
-  if (!response.ok) throw new Error("Could not load attendance register");
+  if (!response.ok) await throwApiError(response, "Could not load attendance register");
   const register = (await response.json()) as FacultyRegister;
   localStorage.setItem(`faculty.register.${courseOfferingId}`, JSON.stringify(register));
   return register;
@@ -303,8 +314,7 @@ export async function startSession(courseOfferingId: string): Promise<FacultySes
     body: JSON.stringify({ course_offering_id: courseOfferingId }),
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new ApiRequestError(response.status, body?.error?.message ?? "Attendance session could not be started.");
+    await throwApiError(response, "Attendance session could not be started.");
   }
   const session = (await response.json()) as FacultySession;
   saveActiveSession(JSON.stringify(session));
@@ -315,7 +325,7 @@ export async function prepareOfflineSessions(): Promise<FacultySession[]> {
   const response = await apiFetch("/api/v1/faculty/attendance-sessions/offline-package", {
     method: "POST",
   });
-  if (!response.ok) throw new Error("Could not prepare offline attendance sessions");
+  if (!response.ok) await throwApiError(response, "Could not prepare offline attendance sessions");
   const sessions = (await response.json()) as FacultySession[];
   localStorage.setItem("faculty.offlineSessions", JSON.stringify(sessions));
   return sessions;
@@ -382,7 +392,7 @@ export function clearCachedActiveSession(): void {
 export async function fetchSession(sessionId: string): Promise<FacultySession | null> {
   const response = await apiFetch(`/api/v1/faculty/attendance-sessions/${sessionId}`);
   if (response.status === 404 || response.status === 403) return null;
-  if (!response.ok) throw new Error("Could not verify active session");
+  if (!response.ok) await throwApiError(response, "Could not verify active session");
   const verified = (await response.json()) as FacultySession;
   saveActiveSession(JSON.stringify(verified));
   return verified;
@@ -392,14 +402,14 @@ export async function closeSession(sessionId: string): Promise<void> {
   const response = await apiFetch(`/api/v1/faculty/attendance-sessions/${sessionId}/close`, {
     method: "POST",
   });
-  if (!response.ok) throw new Error("Could not close attendance session");
+  if (!response.ok) await throwApiError(response, "Could not close attendance session");
   clearActiveSession();
 }
 
 export async function fetchRoster(sessionId: string): Promise<RosterStudent[]> {
   const response = await apiFetch(`/api/v1/faculty/attendance-sessions/${sessionId}/roster`);
   if (!response.ok) {
-    throw new Error(`Roster request failed with ${response.status}`);
+    await throwApiError(response, `Roster request failed with ${response.status}`);
   }
   const roster = (await response.json()) as RosterStudent[];
   localStorage.setItem(`faculty.roster.${sessionId}`, JSON.stringify(roster));
@@ -415,5 +425,5 @@ export async function attest(sessionId: string, studentId: string, reason: strin
     method: "POST",
     body: JSON.stringify({ student_id: studentId, reason }),
   });
-  if (!response.ok) throw new Error("Could not attest attendance");
+  if (!response.ok) await throwApiError(response, "Could not attest attendance");
 }

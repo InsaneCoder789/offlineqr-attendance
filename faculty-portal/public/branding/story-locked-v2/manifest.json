@@ -1,0 +1,21 @@
+{
+  "product": "OfflineQR",
+  "generationMethod": "Built-in imagegen; one master followed by three screen-only edits of that master",
+  "master": "classroom.png",
+  "reference": "ChatGPT Image Oct 13, 2026, 02_41_53 PM.png",
+  "frames": [
+    { "file": "classroom.png", "state": "Classroom", "width": 1505, "height": 1045 },
+    { "file": "scan.png", "state": "Scan captured", "width": 1505, "height": 1045 },
+    { "file": "offline.png", "state": "Saved locally, awaiting sync", "width": 1506, "height": 1045 },
+    { "file": "reconcile.png", "state": "Server accepted, roster updated", "width": 1506, "height": 1045 }
+  ],
+  "invariants": ["Phone left foreground", "Laptop right", "Fixed device perspective and scale", "White-grey studio background", "No webpage text in the bitmap"],
+  "validation": "Visual alignment checked. Raw AI edits have one-pixel canvas-width variance and approximately three-pixel exterior-outline variance. They are not pixel-identical outside screens.",
+  "renderStrategy": "Keep classroom.png as the immutable full-frame base. Only composite the phone and laptop screen regions from subsequent frames, at a common fixed aspect ratio. Never crossfade full frames if pixel-stable hardware is required.",
+  "promptSet": {
+    "master": "Preserve the reference phone, laptop, perspective, scale, reflections and shadows. Remove all external webpage navigation and headings. Phone shows timetable and Scan attendance; laptop shows classroom QR and 0/22 roster.",
+    "scan": "Edit the locked master only inside the phone display: OfflineQR scanner, Scan captured, Signed on this device. Preserve laptop and all exterior pixels.",
+    "offline": "Edit the locked master only inside the phone display: Saved on this device, Waiting to sync, Computer Networks, Section A, Queued. Preserve laptop and all exterior pixels.",
+    "reconcile": "Edit the locked master only inside both displays: phone Server accepted, Attendance synchronized, Verified; laptop 1/22 present and one verified row. Preserve all hardware and background."
+  }
+}

@@ -3,12 +3,12 @@ import { FileQuestion } from "lucide-react";
 
 export default function NotFound() {
   return (
-    <section className="flex min-h-[32rem] flex-col items-center justify-center rounded-lg border bg-card p-8 text-center">
-      <span className="flex size-12 items-center justify-center rounded-lg bg-muted text-primary"><FileQuestion className="size-5" /></span>
-      <p className="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-primary">KIIT Attendance</p>
-      <h2 className="mt-2 text-3xl font-semibold tracking-tight">Page not found</h2>
-      <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">The requested workspace page does not exist or is no longer available.</p>
-      <Link className="mt-6 inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80" href="/dashboard">Return to dashboard</Link>
-    </section>
+    <main className="flex min-h-dvh flex-col items-center justify-center bg-background px-4 py-10 text-center">
+      <span className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"><FileQuestion className="size-6" aria-hidden="true" /></span>
+      <p className="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-primary">OfflineQR</p>
+      <h1 className="mt-2 text-fluid-2xl font-semibold tracking-tight">Page not found</h1>
+      <p className="mt-2 max-w-md text-pretty text-sm leading-6 text-muted-foreground">The requested page does not exist or is no longer available.</p>
+      <Link className="mt-6 inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/85 focus-visible:ring-3 focus-visible:ring-ring/50" href="/">Return to OfflineQR</Link>
+    </main>
   );
 }
