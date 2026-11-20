@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Import a reviewed KIIT faculty onboarding manifest without rotating live passwords.
+"""Import a reviewed Institution faculty onboarding manifest without rotating live passwords.
 
 The manifest contains one-time passwords only while this command is running. Keep it
 outside version control, restrict its permissions, and securely delete it after use.
@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 from pathlib import Path
 from typing import Any
 
@@ -18,13 +17,13 @@ import psycopg
 from psycopg.rows import dict_row
 
 from backend.app.faculty_identity_service import hash_password
+from backend.app.institution_identity import institution_email_allowed
 
 
-EMAIL = re.compile(r"^[^\s@]+@kiit\.ac\.in$", re.IGNORECASE)
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Import reviewed KIIT faculty identities.")
+    parser = argparse.ArgumentParser(description="Import reviewed Institution faculty identities.")
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--result", required=True, type=Path)
     parser.add_argument(
@@ -40,8 +39,8 @@ def validate(row: dict[str, Any], index: int) -> dict[str, str]:
     if not all(isinstance(row.get(field), str) and row[field].strip() for field in required):
         raise ValueError(f"Manifest row {index} is missing a required faculty identity field.")
     email = row["institutional_email"].strip().lower()
-    if not EMAIL.fullmatch(email):
-        raise ValueError(f"Manifest row {index} does not have a valid @kiit.ac.in email.")
+    if not institution_email_allowed(email):
+        raise ValueError(f"Manifest row {index} does not match the configured institution email domains.")
     return {
         "employee_code": row["employee_code"].strip(),
         "display_name": " ".join(row["display_name"].split()),
@@ -64,7 +63,7 @@ def main() -> None:
         raise ValueError("Manifest has duplicate official email addresses or employee codes.")
 
     result: list[dict[str, str]] = []
-    database_url = os.environ.get("DATABASE_URL", "postgresql://localhost/kiit_attendance_goal02")
+    database_url = os.environ.get("DATABASE_URL", "postgresql://localhost/offlineqr_attendance_goal02")
     with psycopg.connect(database_url, row_factory=dict_row) as conn:
         with conn.transaction():
             for row in rows:

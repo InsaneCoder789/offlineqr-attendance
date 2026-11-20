@@ -36,7 +36,7 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     env:
-      DATABASE_URL: postgresql://postgres@localhost/kiit_attendance_goal02
+      DATABASE_URL: postgresql://postgres@localhost/offlineqr_attendance_goal02
       PGHOST: localhost
       PGUSER: postgres
       APP_ENV: development

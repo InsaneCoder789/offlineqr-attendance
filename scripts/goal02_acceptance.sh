@@ -2,13 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DB_PATH="$(mktemp -t kiit_goal02_offline.XXXXXX.sqlite)"
+DB_PATH="$(mktemp -t institution_goal02_offline.XXXXXX.sqlite)"
 PORT="${PORT:-8000}"
 
 cd "$ROOT_DIR"
 ./scripts/db_reset.sh
 
-PYTHONPATH=. .venv/bin/uvicorn backend.app.main:app --host 127.0.0.1 --port "$PORT" >/tmp/kiit_goal02_uvicorn.log 2>&1 &
+PYTHONPATH=. .venv/bin/uvicorn backend.app.main:app --host 127.0.0.1 --port "$PORT" >/tmp/institution_goal02_uvicorn.log 2>&1 &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -f "$DB_PATH"' EXIT
 

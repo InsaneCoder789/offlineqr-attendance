@@ -1,6 +1,6 @@
 <div align="center">
 
-![OfflineQR Attendance product ecosystem](assets/offlineqr-readme-banner.png)
+![OfflineQR Attendance product ecosystem](assets/offlineqr-editorial.webp)
 
 # OfflineQR Attendance
 
@@ -18,6 +18,21 @@
 
 ## What It Is
 
+OfflineQR is being developed as a customizable institutional attendance product. The public editorial website lives at `/`; faculty and administrator workspaces retain their dedicated routes. The editorial-only deployment is available at [offlineqr-editorial.vercel.app](https://offlineqr-editorial.vercel.app/). Its deployment planner submits customer-entered details to a server-side PDF generator and downloads a branded proposal/pro forma document. Proposal data is not persisted or emailed by this endpoint, and downloading a PDF does not place an order or confirm payment.
+
+The repository is institution-neutral. Development fixtures use fictional names, clearly synthetic student identifiers and `example.edu` sample identities; these are not official staff or student records. Configure `INSTITUTION_EMAIL_DOMAINS` privately for each authorized deployment, and provision accounts explicitly. Mobile service shortcuts use `ACADEMIC_PORTAL_URL` and `LEARNING_PORTAL_URL` build settings and accept HTTPS URLs only.
+
+## Data And Branding Policy
+
+- Do not commit institutional rosters, official email directories, student records, real phone numbers, payment records or customer credentials.
+- Use synthetic fixtures for demos and tests. Any resemblance between a fictional name and a real person is coincidental.
+- Keep customer domains, authorized logos, imported spreadsheets, database exports and device captures outside the public source tree.
+- Generated customer PDFs and confidential operational artifacts are excluded from Git and from the editorial deployment's file allowlist.
+- Vercel Analytics records page views, with URL parameters and fragments redacted. Proposal fields are not sent as analytics events.
+- Current-file anonymization does not erase previous Git commits, published releases, deployed copies or externally shared documents. Review those separately before distributing the repository.
+
+The current architecture supports an institution-specific deployment. Shared SaaS tenancy, tenant-scoped database authorization, commercial module entitlements, subscription billing, customer provisioning and production delivery are pending. A configurable email domain is not tenant isolation.
+
 OfflineQR Attendance is an offline-first attendance ecosystem for educational institutions. It combines a Flutter student application, a Next.js faculty portal, an ICT device-governance console, and a FastAPI backend backed by PostgreSQL and Redis.
 
 The classroom workflow does not stop when Internet access disappears. A student can scan a valid classroom QR, create a device-signed proof, and preserve it in a durable local outbox. When connectivity returns, the backend re-verifies the proof and the faculty roster reflects the accepted attendance.
@@ -28,7 +43,7 @@ The system is designed to be **proxy-resistant, device-bound, tamper-evident, au
 
 | Surface | Purpose | Core capabilities |
 | --- | --- | --- |
-| Student app | Capture and understand attendance | Timetable, course attendance, secure in-app scanner, offline logger, device status, KIIT portal shortcuts |
+| Student app | Capture and understand attendance | Timetable, course attendance, secure in-app scanner, offline logger, device status, Institution portal shortcuts |
 | Faculty portal | Operate classroom sessions | Today's classes, dynamic QR, live roster, projector mode, manual attestation, records and reconciliation |
 | ICT portal | Govern identity and devices | Device inventory, replacement approval, one-time activation, revocation, password recovery and audit history |
 | Backend | Enforce institutional truth | Authentication, eligibility, signatures, duplicates, session lifecycle, synchronization and reporting |
@@ -187,6 +202,7 @@ shared/fixtures/         Cross-platform cryptographic protocol vectors
 scripts/                 Database, import and verification utilities
 .github/workflows/       Ten independent CI checks and release publishing
 assets/                  Public repository artwork
+deploy/editorial/        Isolated editorial website and proposal PDF endpoint
 ```
 
 ## Local Development
@@ -202,7 +218,7 @@ assets/                  Public repository artwork
 ### 1. Prepare the Database
 
 ```bash
-export DATABASE_URL=postgresql://localhost/kiit_attendance_goal02
+export DATABASE_URL=postgresql://localhost/offlineqr_attendance_goal02
 ./scripts/db_reset.sh
 ```
 
@@ -260,7 +276,7 @@ Tags matching `v*` run the separate release workflow and publish container image
 
 Before a real campus rollout, the institution must provide and approve:
 
-1. KIIT OIDC or SAML identity integration, MFA policy, recovery controls and role claims.
+1. Institution OIDC or SAML identity integration, MFA policy, recovery controls and role claims.
 2. Authoritative student, faculty, course, section, room, timetable and enrollment feeds.
 3. Android Play Integrity and Apple App Attest or DeviceCheck enforcement.
 4. Managed PostgreSQL and Redis with TLS, credentials, backups, failover and monitoring.

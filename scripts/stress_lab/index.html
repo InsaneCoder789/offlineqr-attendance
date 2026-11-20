@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Backend Stress HUD</title>
+<style>
+:root{--bg:#04090c;--p:rgba(14,26,31,.82);--p2:rgba(20,36,42,.9);--line:#16313a;--ink:#dff3f1;--mute:#7b9aa0;--cy:#22d3ee;--ok:#34d399;--warn:#fbbf24;--bad:#f87171;--vi:#a78bfa;--glow:0 0 18px rgba(34,211,238,.18)}
+@media (prefers-color-scheme:light){:root{--bg:#eaf3f4;--p:rgba(255,255,255,.9);--p2:#fff;--line:#c8dbde;--ink:#0b2227;--mute:#53727a;--cy:#0891b2;--ok:#059669;--warn:#b45309;--bad:#dc2626;--vi:#7c3aed;--glow:none}}
+*{box-sizing:border-box}html{background:var(--bg)}
+body{margin:0;color:var(--ink);font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:radial-gradient(1200px 500px at 15% -10%,rgba(34,211,238,.10),transparent),radial-gradient(900px 500px at 100% 0,rgba(167,139,250,.08),transparent),var(--bg);min-height:100vh}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px);z-index:0}
+.wrap{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:14px 16px 60px}
+header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+.logo{width:38px;height:38px;border:1.5px solid var(--cy);border-radius:10px;display:grid;place-items:center;color:var(--cy);box-shadow:var(--glow);font-weight:800}
+h1{font-size:18px;margin:0;letter-spacing:.14em;text-transform:uppercase}h1 small{display:block;color:var(--mute);font-size:11px;letter-spacing:.1em;font-weight:400}
+.sp{flex:1}.pill{padding:5px 12px;border:1px solid var(--line);border-radius:99px;font-size:12px;color:var(--mute);background:var(--p)}
+.pill b{color:var(--ink)}.live{color:var(--ok);border-color:var(--ok)}.live i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;animation:b 1.2s infinite}.idle{color:var(--mute)}.down{color:var(--bad);border-color:var(--bad)}
+@keyframes b{50%{opacity:.25}}
+.pipe{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.step{flex:1;min-width:120px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--p);font-size:12px;position:relative;overflow:hidden}
+.step b{display:block;letter-spacing:.06em;text-transform:uppercase;font-size:11px}.step span{color:var(--mute)}
+.step.passed{border-color:var(--ok)}.step.failed{border-color:var(--bad)}.step.running{border-color:var(--warn);box-shadow:0 0 14px rgba(251,191,36,.25)}
+.step.running:after{content:"";position:absolute;left:0;bottom:0;height:2px;width:40%;background:var(--warn);animation:sl 1.2s linear infinite}@keyframes sl{from{left:-40%}to{left:100%}}
+.step.passed b{color:var(--ok)}.step.failed b{color:var(--bad)}.step.running b{color:var(--warn)}
+.grid{display:grid;gap:12px}.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}.g21{grid-template-columns:2fr 1fr}
+@media(max-width:1000px){.g4{grid-template-columns:repeat(2,1fr)}.g3,.g2,.g21{grid-template-columns:1fr}}
+@media(max-width:560px){.g4{grid-template-columns:1fr}}
+.panel{background:var(--p);border:1px solid var(--line);border-radius:14px;padding:12px 14px;backdrop-filter:blur(6px);position:relative}
+.panel h2{margin:0 0 8px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute);font-weight:600;display:flex;justify-content:space-between;gap:8px}
+.panel h2 em{font-style:normal;color:var(--cy)}
+.kpi{display:flex;gap:12px;align-items:center}.kpi svg{flex:0 0 92px}.kpi .v{font-size:26px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}.kpi .l{color:var(--mute);font-size:11px;letter-spacing:.08em;text-transform:uppercase}.kpi .s{font-size:12px;color:var(--mute)}
+canvas{width:100%;height:170px;display:block}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--mute);margin-top:4px}.legend i{display:inline-block;width:10px;height:3px;margin-right:5px;vertical-align:middle;border-radius:2px}
+.heat{display:grid;grid-template-columns:repeat(auto-fill,minmax(14px,1fr));gap:3px}.heat i{aspect-ratio:1;border-radius:3px;background:#12242a;display:block}
+.phase{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--p2)}.phase.passed{border-color:rgba(52,211,153,.5)}.phase.failed{border-color:rgba(248,113,113,.6)}.phase.running{border-color:var(--warn)}
+.phase h3{margin:0;font-size:13px;display:flex;justify-content:space-between;gap:8px}.phase p{margin:2px 0 8px;color:var(--mute);font-size:11px}
+.badge{font-size:10px;padding:2px 8px;border-radius:99px;border:1px solid currentColor;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}.b-passed{color:var(--ok)}.b-failed{color:var(--bad)}.b-running{color:var(--warn)}.b-queued{color:var(--mute)}
+.kv{display:grid;grid-template-columns:1fr auto;gap:2px 10px;font-size:12px}.kv span{color:var(--mute)}.kv b{font-variant-numeric:tabular-nums;text-align:right}
+table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:var(--mute);font-weight:600;position:sticky;top:0;background:var(--p2)}
+.scroll{max-height:330px;overflow:auto;border-radius:8px}.ok{color:var(--ok);font-weight:700}.bad{color:var(--bad);font-weight:700}.skip{color:var(--warn);font-weight:700}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.chip{border:1px solid var(--line);background:transparent;color:var(--mute);border-radius:99px;padding:3px 11px;font:inherit;font-size:12px;cursor:pointer}.chip.on{color:var(--bg);background:var(--cy);border-color:var(--cy)}
+input.s{background:var(--p2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:6px 10px;font:inherit;font-size:12px;width:100%;margin-bottom:8px}
+.sec{border:1px solid var(--line);border-radius:10px;margin-bottom:6px;background:var(--p2)}.sec summary{cursor:pointer;padding:8px 10px;display:flex;gap:10px;align-items:center;list-style:none;font-size:13px}
+.sec summary::-webkit-details-marker{display:none}.sec summary .t{flex:1}.bar{height:5px;border-radius:5px;background:var(--line);overflow:hidden;width:120px;display:flex}.bar i{display:block;height:100%}
+.it{display:flex;gap:8px;padding:4px 12px 4px 14px;font-size:12px;border-top:1px dashed var(--line)}.dot{flex:0 0 10px;height:10px;border-radius:50%;margin-top:4px;border:1.5px solid var(--mute)}.dot.done{background:var(--ok);border-color:var(--ok)}.dot.part{background:linear-gradient(90deg,var(--warn) 50%,transparent 50%);border-color:var(--warn)}
+.term{background:#02070a;color:#9be7d9;border:1px solid var(--line);border-radius:10px;padding:10px;height:220px;overflow:auto;font-size:12px;white-space:pre-wrap}
+.find{border-left:3px solid var(--warn);padding:6px 10px;margin:6px 0;background:var(--p2);border-radius:0 8px 8px 0;font-size:12px}.find.hi{border-color:var(--bad)}.find b{display:block;margin-bottom:2px}
+.right{text-align:right}
+</style></head><body><div class="wrap">
+<header>
+ <div class="logo">QR</div>
+ <h1>Backend Stress HUD<small>OfflineQR attendance · signed-proof pipeline · scratch database</small></h1>
+ <span class="sp"></span>
+ <span class="pill" id="apiPill">API …</span>
+ <span class="pill" id="runPill">IDLE</span>
+ <span class="pill"><b id="clock">--:--:--</b></span>
+</header>
+<div class="pipe" id="pipe"></div>
+
+<div class="grid g4" style="margin-bottom:12px">
+ <div class="panel"><div class="kpi"><svg viewBox="0 0 100 100" id="r1"></svg><div><div class="l">Attendance saved</div><div class="v" id="k1">0</div><div class="s" id="k1s"></div></div></div></div>
+ <div class="panel"><div class="kpi"><svg viewBox="0 0 100 100" id="r2"></svg><div><div class="l">Throughput now</div><div class="v" id="k2">0</div><div class="s" id="k2s"></div></div></div></div>
+ <div class="panel"><div class="kpi"><svg viewBox="0 0 100 100" id="r3"></svg><div><div class="l">Workers CPU</div><div class="v" id="k3">0</div><div class="s" id="k3s"></div></div></div></div>
+ <div class="panel"><div class="kpi"><svg viewBox="0 0 100 100" id="r4"></svg><div><div class="l">Integrity</div><div class="v" id="k4">—</div><div class="s" id="k4s"></div></div></div></div>
+</div>
+
+<div class="panel" style="margin-bottom:12px"><h2>Stateless API heads · shared Postgres + Redis <em id="hdn"></em></h2><div class="grid g4" id="heads"></div></div>
+
+<div class="grid g21" style="margin-bottom:12px">
+ <div class="panel"><h2>Attendance records saved over time <em id="c1v"></em></h2><canvas id="c1"></canvas><div class="legend"><span><i style="background:var(--ok)"></i>PRESENT</span><span><i style="background:var(--bad)"></i>ABSENT</span><span><i style="background:var(--mute)"></i>enrolled</span></div></div>
+ <div class="panel"><h2>Throughput records/s <em id="c2v"></em></h2><canvas id="c2"></canvas><div class="legend"><span><i style="background:var(--cy)"></i>per second</span><span><i style="background:var(--warn)"></i>peak</span></div></div>
+</div>
+
+<div class="grid g3" style="margin-bottom:12px">
+ <div class="panel"><h2>API worker CPU % <em id="c3v"></em></h2><canvas id="c3"></canvas><div class="legend" id="c3l"></div></div>
+ <div class="panel"><h2>Postgres connections <em id="c4v"></em></h2><canvas id="c4"></canvas><div class="legend"><span><i style="background:var(--vi)"></i>open</span><span><i style="background:var(--cy)"></i>active</span><span><i style="background:var(--bad)"></i>limit 100</span></div></div>
+ <div class="panel"><h2>Health-check latency ms · load avg <em id="c5v"></em></h2><canvas id="c5"></canvas><div class="legend"><span><i style="background:var(--ok)"></i>/health ms</span><span><i style="background:var(--warn)"></i>load avg (x10)</span></div></div>
+</div>
+
+<div class="grid g21" style="margin-bottom:12px">
+ <div class="panel"><h2>Test phases <em id="phn"></em></h2><div class="grid g3" id="phases"></div></div>
+ <div class="panel"><h2>Latency by phase (ms) <em>p50 · p95 · p99</em></h2><canvas id="c6"></canvas><div class="legend"><span><i style="background:var(--ok)"></i>p50</span><span><i style="background:var(--warn)"></i>p95</span><span><i style="background:var(--bad)"></i>p99</span></div>
+ <h2 style="margin-top:12px">Outcome mix (latest phase)</h2><canvas id="c7" style="height:120px"></canvas></div>
+</div>
+
+<div class="grid g2" style="margin-bottom:12px">
+ <div class="panel"><h2>Class fill map <em id="hm"></em></h2><div class="heat" id="heat"></div><div class="legend"><span><i style="background:#12242a;height:8px"></i>0%</span><span><i style="background:var(--warn);height:8px"></i>partial</span><span><i style="background:var(--ok);height:8px"></i>full</span></div>
+  <h2 style="margin-top:12px">Server events, last 60 s</h2><div id="ev" class="kv"></div></div>
+ <div class="panel"><h2>Live console</h2><div class="term" id="term"></div></div>
+</div>
+
+<div class="grid g2" style="margin-bottom:12px">
+ <div class="panel"><h2>Penetration probes <em id="secn"></em></h2><div class="chips" id="secf"></div><div class="scroll"><table id="sec"></table></div></div>
+ <div class="panel"><h2>Findings</h2><div class="scroll" id="finds"></div></div>
+</div>
+
+<div class="panel"><h2>Complete backend checklist <em id="chkn"></em></h2>
+ <div class="grid g2" style="margin-bottom:8px"><div><canvas id="c8" style="height:150px"></canvas></div><div><input class="s" id="q" placeholder="Search the checklist…"><div class="chips" id="chkf"></div></div></div>
+ <div id="chk"></div></div>
+</div>
+<script>
+const $=id=>document.getElementById(id),fmt=n=>typeof n==="number"?n.toLocaleString():n??"—";
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const N=180;let S={t:[],present:[],absent:[],enrolled:[],rate:[],peak:[],conns:[],active:[],api:[],load:[],workers:{}},last=null,peakRate=0,lastT=null,lastP=null,live=null,status={phases:{}},chk=[],chkFilter="all",secFilter="all",secSrc="pentest",lastInteract=0;
+function ring(id,pct,color,txt){const r=38,c=2*Math.PI*r;$(id).innerHTML=`<circle cx="50" cy="50" r="${r}" fill="none" stroke="${css('--line')}" stroke-width="9"/><circle cx="50" cy="50" r="${r}" fill="none" stroke="${color}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${c*Math.min(1,Math.max(0,pct))} ${c}" transform="rotate(-90 50 50)" style="filter:drop-shadow(0 0 5px ${color});transition:stroke-dasharray .5s"/><text x="50" y="55" text-anchor="middle" font-size="17" font-weight="700" fill="${css('--ink')}">${txt}</text>`}
+function prep(cv){const d=devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;if(cv.width!==w*d||cv.height!==h*d){cv.width=w*d;cv.height=h*d}const x=cv.getContext("2d");x.setTransform(d,0,0,d,0,0);x.clearRect(0,0,w,h);return[x,w,h]}
+function line(id,series,o={}){const[x,w,h]=prep($(id)),L=36,B=16,T=6,R=6;let max=o.max||Math.max(1,...series.flatMap(s=>s.d.filter(v=>v!=null)))*1.12;
+ x.strokeStyle=css('--line');x.fillStyle=css('--mute');x.font="10px monospace";x.lineWidth=1;
+ for(let i=0;i<=4;i++){const y=T+(h-T-B)*i/4;x.beginPath();x.moveTo(L,y);x.lineTo(w-R,y);x.stroke();x.fillText(Math.round(max*(1-i/4)),2,y+3)}
+ series.forEach(s=>{const n=s.d.length;if(n<2)return;const px=i=>L+(w-L-R)*(i/(N-1)),py=v=>T+(h-T-B)*(1-Math.min(v,max)/max);
+  const off=N-n;x.beginPath();s.d.forEach((v,i)=>{const X=px(i+off),Y=py(v);i?x.lineTo(X,Y):x.moveTo(X,Y)});
+  if(s.fill){x.save();x.lineTo(px(N-1),h-B);x.lineTo(px(off),h-B);x.closePath();const g=x.createLinearGradient(0,T,0,h);g.addColorStop(0,s.c+"55");g.addColorStop(1,s.c+"00");x.fillStyle=g;x.fill();x.restore()}
+  x.strokeStyle=s.c;x.lineWidth=s.w||1.6;x.setLineDash(s.dash||[]);x.stroke();x.setLineDash([])});
+ x.fillStyle=css('--mute');x.fillText("-"+N+"s",L,h-3);x.fillText("now",w-26,h-3)}
+function bars(id,groups,series){const[x,w,h]=prep($(id)),L=34,B=16,T=6;const max=Math.max(1,...series.flatMap(s=>s.d))*1.15;x.font="10px monospace";x.fillStyle=css('--mute');
+ const gw=(w-L)/Math.max(1,groups.length);groups.forEach((g,i)=>{const bw=Math.min(16,(gw-8)/series.length);series.forEach((s,j)=>{const v=s.d[i]||0,bh=(h-T-B)*v/max;x.fillStyle=s.c;x.fillRect(L+i*gw+gw/2-bw*series.length/2+j*bw,h-B-bh,bw-2,bh)});x.fillStyle=css('--mute');x.fillText(g,L+i*gw+gw/2-12,h-3)});
+ for(let i=0;i<=3;i++){x.fillStyle=css('--mute');x.fillText(Math.round(max*(1-i/3)),0,T+(h-T-B)*i/3+3)}}
+function donut(id,items){const[x,w,h]=prep($(id));const tot=items.reduce((a,b)=>a+b.v,0);const cx=h/2,cy=h/2,r=h/2-8;let a=-Math.PI/2;
+ if(!tot){x.fillStyle=css('--mute');x.fillText("no data yet",10,h/2);return}
+ items.forEach(it=>{const d=2*Math.PI*it.v/tot;x.beginPath();x.arc(cx,cy,r,a,a+d);x.strokeStyle=it.c;x.lineWidth=14;x.stroke();a+=d});
+ x.font="11px monospace";items.forEach((it,i)=>{x.fillStyle=it.c;x.fillRect(h+8,10+i*16,9,9);x.fillStyle=css('--ink');x.fillText(it.l+"  "+it.v.toLocaleString(),h+22,18+i*16)})}
+const PH=[["pentest","Pen test (deep)","Protocol abuse, auth edge cases, races, slow sockets"],["stateless","Stateless heads","Tokens, cookies, limits, idempotency across heads"],["ws","Live portal events","WebSocket roster pushes across heads"],["security","Security probes","Forgery, replay, tampering, access control"],["burst","Simultaneous burst","All signed proofs released at once"],["duplicates","Retry storm","Each proof sent 3x concurrently"],["chaos","Chaos","Workers and whole heads killed, DB sessions cut"],["offline","Offline sync","Scan offline, reconnect in/after window"],["natburst","Campus NAT (default limits)","2,800 students behind one IP address"],["natfix","Campus NAT (tuned limits)","Same load with per-IP limits sized for a campus"],["finalize","Reconcile","Unproven students become ABSENT"]];
+function metrics(n,r){if(!r)return"";let m={};const v=r.verify||{};
+ if(r.probes!==undefined)m={probes:r.probes,passed:r.passed,failed:(r.failed||[]).length};
+ else if(n==="offline"){const a=r.in_window||{};m={"in window":a.submitted,"/s":a.throughput_per_s,accepted:a.acked,lost:(a.verify||{}).lost,"late refused":(r.after_window?.results||{}).REJECTED_RECONCILIATION_WINDOW_CLOSED,"late saved":r.after_window?.records_created_after_window}}
+ else if(n==="finalize")m={present:r.present,absent:r.absent,records:r.records,enrolled:r.enrolled};
+ else m={sent:r.submitted,"/s":r.throughput_per_s,"p95 ms":r.p95_ms,attempts:r.attempts,"gave up":r.gave_up,saved:v.present_records,lost:v.lost??v.acknowledged_but_missing,dupes:v.duplicate_records,"429s":r.http_429,"client procs":r.client_procs,"build s":r.build_s};
+ return`<div class="kv">${Object.entries(m).filter(([,x])=>x!==undefined).map(([k,x])=>`<span>${k}</span><b>${fmt(x)}</b>`).join("")}</div>`}
+function render(){
+ const ph=status.phases||{},now=Date.now()/1000;let running=PH.find(p=>(ph[p[0]]||{}).status==="running");
+ $("pipe").innerHTML=PH.map(([k,t])=>{const p=ph[k]||{status:"queued"};return`<div class="step ${p.status}"><b>${t}</b><span>${p.status}${p.ended?" · "+(p.ended-p.started).toFixed(1)+"s":""}</span></div>`}).join("");
+ $("runPill").className="pill "+(running?"live":"idle");$("runPill").innerHTML=running?`<i></i>RUNNING · ${running[1]}`:(Object.values(ph).length?"SUITE COMPLETE":"IDLE");
+ $("phases").innerHTML=PH.map(([k,t,d])=>{const p=ph[k]||{status:"queued"};return`<div class="phase ${p.status}"><h3>${t}<span class="badge b-${p.status}">${p.status}</span></h3><p>${d}</p>${metrics(k,p.report)}</div>`}).join("");
+ const done=Object.values(ph).filter(p=>p.status==="passed").length,bad=Object.values(ph).filter(p=>p.status==="failed").length;$("phn").textContent=`${done} passed · ${bad} failed`;
+ const rep=n=>(ph[n]||{}).report||{};const lat=PH.filter(p=>rep(p[0]).p50_ms!==undefined||(rep(p[0]).in_window||{}).p50_ms!==undefined);
+ const L=n=>rep(n).in_window||rep(n);bars("c6",lat.map(p=>p[0]),[{c:css('--ok'),d:lat.map(p=>L(p[0]).p50_ms)},{c:css('--warn'),d:lat.map(p=>L(p[0]).p95_ms)},{c:css('--bad'),d:lat.map(p=>L(p[0]).p99_ms)}]);
+ const lastRep=[...PH].reverse().map(p=>L(p[0])).find(r=>r&&r.results);const items=[];if(lastRep){Object.entries(lastRep.results).forEach(([k,v],i)=>items.push({l:k.replace("REJECTED_","rej ").slice(0,22),v,c:k.startsWith("ACC")||k.startsWith("ALREADY")?css('--ok'):k.startsWith("RETRY")?css('--warn'):css('--bad')}));Object.entries(lastRep.http||{}).filter(([k])=>k!=="200").forEach(([k,v])=>items.push({l:"http "+k,v,c:css('--vi')}))}donut("c7",items);
+ const srcs=["pentest","stateless","ws","security"].filter(k=>(rep(k).all||[]).length);if(!srcs.includes(secSrc))secSrc=srcs[0]||"security";const s=rep(secSrc);const all=s.all||[];$("secn").textContent=all.length?`${s.passed}/${s.probes} passed`:"";
+ $("secf").innerHTML=srcs.map(k=>`<button class="chip ${secSrc===k?"on":""}" style="border-style:dashed" onclick="secSrc='${k}';render()">${k}</button>`).join("")+["all","pass","fail","skipped"].map(f=>`<button class="chip ${secFilter===f?"on":""}" onclick="secFilter='${f}';render()">${f}</button>`).join("");
+ const rows=all.filter(r=>secFilter==="all"||(secFilter==="pass"&&r.pass&&!r.skipped)||(secFilter==="fail"&&!r.pass)||(secFilter==="skipped"&&r.skipped));
+ $("sec").innerHTML=all.length?`<tr><th>Probe</th><th>Expected</th><th>Got</th><th></th></tr>`+rows.map(r=>`<tr><td>${r.probe}</td><td>${[].concat(r.expected).join(", ").slice(0,60)}</td><td>${typeof r.got==="object"?JSON.stringify(r.got):String(r.got).slice(0,70)}</td><td class="${r.skipped?"skip":r.pass?"ok":"bad"}">${r.skipped?"SKIP":r.pass?"PASS":"FAIL"}</td></tr>`).join(""):`<tr><td>Waiting for the security phase…</td></tr>`;
+ $("finds").innerHTML=(status.findings||[]).map(f=>`<div class="find ${f.sev==="high"?"hi":""}"><b>${f.title}</b>${f.body}</div>`).join("")||"None yet.";
+ renderChk()}
+function renderChk(){const q=$("q").value.toLowerCase();let T=0,D=0,P=0;chk.forEach(s=>s.items.forEach(i=>{T++;if(i.s==="done")D++;if(i.s==="part")P++}));
+ $("chkn").textContent=`${D} done · ${P} partial · ${T-D-P} to do · ${Math.round(100*(D+P/2)/Math.max(1,T))}% covered`;
+ $("chkf").innerHTML=["all","done","part","todo"].map(f=>`<button class="chip ${chkFilter===f?"on":""}" onclick="chkFilter='${f}';renderChk()">${f}</button>`).join("");
+ const open=new Set([...document.querySelectorAll("#chk details[open]")].map(d=>d.dataset.k));
+ $("chk").innerHTML=chk.map(s=>{const d=s.items.filter(i=>i.s==="done").length,p=s.items.filter(i=>i.s==="part").length,n=s.items.length;
+  const its=s.items.filter(i=>(chkFilter==="all"||i.s===chkFilter)&&(!q||i.t.toLowerCase().includes(q)));if(!its.length)return"";
+  return`<details class="sec" data-k="${s.title}" ${open.has(s.title)||q?"open":""}><summary><span class="t">${s.title}</span><span style="color:var(--mute)">${d}/${n}</span><span class="bar"><i style="width:${100*d/n}%;background:var(--ok)"></i><i style="width:${100*p/n}%;background:var(--warn)"></i></span></summary>${its.map(i=>`<div class="it"><span class="dot ${i.s}"></span><span>${i.t}</span></div>`).join("")}</details>`}).join("");
+ const[x,w,h]=prep($("c8"));const secs=chk;x.font="10px monospace";secs.forEach((s,i)=>{const n=s.items.length,d=s.items.filter(i=>i.s==="done").length,p=s.items.filter(i=>i.s==="part").length,y=4+i*(h-8)/secs.length,bh=(h-8)/secs.length-4,bw=w-190;
+  x.fillStyle=css('--line');x.fillRect(180,y,bw,bh);x.fillStyle=css('--ok');x.fillRect(180,y,bw*d/n,bh);x.fillStyle=css('--warn');x.fillRect(180+bw*d/n,y,bw*p/n,bh);x.fillStyle=css('--ink');x.fillText(s.title.replace(/^\d+\.\s*/,"").slice(0,27),0,y+bh-1)})}
+function sample(L){live=L;const db=L.db||{},t=L.t;
+ S.t.push(t);const push=(k,v)=>{S[k].push(v);if(S[k].length>N)S[k].shift()};if(S.t.length>N)S.t.shift();
+ push("present",db.present??0);push("absent",db.absent??0);push("enrolled",db.enrolled??0);
+ const dp=lastP==null?0:Math.max(0,(db.present||0)+(db.absent||0)-lastP),dt=lastT?Math.max(.2,t-lastT):1;const r=lastP==null?0:dp/dt;lastP=(db.present||0)+(db.absent||0);lastT=t;peakRate=Math.max(peakRate*.999,r);
+ push("rate",r);push("peak",peakRate);push("conns",db.conns??0);push("active",db.active??0);push("api",L.api.up?L.api.ms:0);push("load",L.load[0]*10);
+ (L.workers||[]).forEach((w,i)=>{const k="h"+((w.head||0)+1)+"w"+i;S.workers[k]=S.workers[k]||[];S.workers[k].push(w.cpu);if(S.workers[k].length>N)S.workers[k].shift()});
+ const cpu=(L.workers||[]).reduce((a,w)=>a+w.cpu,0);
+ $("apiPill").className="pill "+(L.api.up?"live":"down");$("apiPill").innerHTML=L.api.up?`<i></i>API ${L.api.ms} ms · ${L.workers.length} workers`:"API DOWN";
+ const tot=db.enrolled||0,got=db.present||0;ring("r1",tot?got/tot:0,css('--ok'),tot?Math.round(100*got/tot)+"%":"—");$("k1").textContent=fmt(got);$("k1s").textContent=`of ${fmt(tot)} enrolled · ${fmt(db.absent||0)} absent`;
+ const mx=Math.max(50,peakRate);ring("r2",r/mx,css('--cy'),Math.round(r));$("k2").textContent=fmt(Math.round(r))+"/s";$("k2s").textContent=`peak ${Math.round(peakRate)}/s · ${fmt(db.verified||0)} proofs verified`;
+ ring("r3",Math.min(1,cpu/Math.max(100,(L.workers.length||1)*100)),css('--vi'),Math.round(cpu)+"%");$("k3").textContent=Math.round(cpu)+"%";$("k3s").textContent=`${(L.workers||[]).reduce((a,w)=>a+w.mb,0).toFixed(0)} MB RSS · load ${L.load[0].toFixed(1)}`;
+ const dup=((status.phases||{}).burst||{}).report?.verify?.duplicate_records||0,lost=Object.values(status.phases||{}).reduce((a,p)=>a+(((p.report||{}).verify||{}).lost||((p.report||{}).verify||{}).acknowledged_but_missing||0),0);
+ const ok=!lost&&!dup;ring("r4",1,ok?css('--ok'):css('--bad'),ok?"OK":"!");$("k4").textContent=ok?"ZERO LOSS":`${lost} LOST`;$("k4").style.color=ok?css('--ok'):css('--bad');$("k4s").textContent=`${lost} lost · ${dup} duplicate records`;
+ line("c1",[{d:S.enrolled,c:css('--mute'),dash:[4,4],w:1},{d:S.present,c:css('--ok'),fill:1},{d:S.absent,c:css('--bad')}]);$("c1v").textContent=fmt(got);
+ line("c2",[{d:S.peak,c:css('--warn'),dash:[3,4],w:1},{d:S.rate,c:css('--cy'),fill:1}]);$("c2v").textContent=Math.round(r)+"/s";
+ const wk=Object.keys(S.workers),cols=[css('--cy'),css('--ok'),css('--vi'),css('--warn'),'#f472b6','#60a5fa','#fb923c','#a3e635'];line("c3",wk.map((k,i)=>({d:S.workers[k],c:cols[i%8]})),{max:100});$("c3l").innerHTML=wk.map((k,i)=>`<span><i style="background:${cols[i%8]}"></i>${k}</span>`).join("");$("c3v").textContent=Math.round(cpu)+"% total";
+ line("c4",[{d:S.conns.map(()=>100),c:css('--bad'),dash:[3,4],w:1},{d:S.conns,c:css('--vi'),fill:1},{d:S.active,c:css('--cy')}],{max:105});$("c4v").textContent=`${db.conns??0} open`;
+ line("c5",[{d:S.api,c:css('--ok')},{d:S.load,c:css('--warn')}]);$("c5v").textContent=L.api.up?L.api.ms+" ms":"down";
+ $("hdn").textContent=`${L.api.heads_up||0}/${(L.heads||[]).length} heads up · redis ${L.redis&&L.redis.up?L.redis.ops+" ops/s · "+L.redis.clients+" clients · "+L.redis.keys+" keys":"down"}`;
+ const served=Object.assign({},...Object.values((status.phases||{})).map(p=>((p.report||{}).heads)||{}));
+ $("heads").innerHTML=(L.heads||[]).map((hd,i)=>{const cpu=hd.workers.reduce((a,w)=>a+w.cpu,0),mb=hd.workers.reduce((a,w)=>a+w.mb,0);return`<div class="phase ${hd.up?"passed":"failed"}"><h3>head ${i+1}<span class="badge ${hd.up?"b-passed":"b-failed"}">${hd.up?"up":"down"}</span></h3><p>${hd.url}</p><div class="kv"><span>health</span><b>${hd.ms??"—"} ms</b><span>workers</span><b>${hd.workers.length}</b><span>cpu</span><b>${cpu.toFixed(0)}%</b><span>memory</span><b>${mb.toFixed(0)} MB</b><span>requests served (last load)</span><b>${fmt(served[hd.url]||0)}</b></div></div>`}).join("")||"<span>no heads registered</span>";
+ const cl=L.classes||[];$("hm").textContent=cl.length+" classes";if(cl.length){$("heat").innerHTML=cl.map(([p,r])=>{const f=r?p/r:0;const c=f===0?"#12242a":f>=.999?css('--ok'):`color-mix(in srgb,${css('--warn')} ${Math.round(30+70*f)}%,#12242a)`;return`<i style="background:${c}" title="${p}/${r}"></i>`}).join("")}
+ $("ev").innerHTML=(db.events||[]).map(([k,v])=>`<span>${k}</span><b>${v}</b>`).join("")||"<span>quiet</span><b></b>";
+ const term=$("term"),stick=term.scrollTop+term.clientHeight>=term.scrollHeight-20;term.textContent=(L.log||[]).join("\n")+"\n"+(running(L)?"…":"");if(stick)term.scrollTop=term.scrollHeight}
+function running(){return Object.values(status.phases||{}).some(p=>p.status==="running")}
+async function poll(){try{const[L,st]=await Promise.all([fetch("/live").then(r=>r.json()),fetch("/status.json").then(r=>r.json())]);status=st;sample(L);render();$("clock").textContent=new Date().toLocaleTimeString()}catch(e){$("apiPill").className="pill down";$("apiPill").textContent="HUD feed offline"}}
+async function loadChk(){try{chk=await (await fetch("/checklist")).json();renderChk()}catch(e){}}
+$("q").addEventListener("input",renderChk);window.addEventListener("resize",()=>{if(live)sample(live)});
+loadChk();setInterval(loadChk,5000);poll();setInterval(poll,1000);
+</script></body></html>

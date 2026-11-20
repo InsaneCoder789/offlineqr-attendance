@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DB_NAME="${DB_NAME:-kiit_attendance_goal02}"
+DB_NAME="${DB_NAME:-offlineqr_attendance_goal02}"
 
 dropdb --if-exists "$DB_NAME"
 createdb "$DB_NAME"

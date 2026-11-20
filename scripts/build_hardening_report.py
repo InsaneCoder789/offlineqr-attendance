@@ -177,7 +177,7 @@ def build() -> None:
     paragraph(doc, "CREATED represents a scheduled session. ACTIVE is the only state that can issue new QR codes. When faculty ends attendance, the session transitions to SYNCING: no new QR is issued, but proofs with a valid previously signed QR may still reconcile. After the seven-day reconciliation period, an authorized faculty workflow can seal the session as RECONCILED. The academic statuses stay intentionally simple: PRESENT or ABSENT.")
     heading(doc, "6. Faculty and Student Experience")
     table(doc, ["Surface", "Role in the system", "Offline behavior"], [
-        ["Flutter student app", "Shows timetable, personal attendance, scanner, and KIIT portal links.", "Reads local timetable/history and stores signed proof outbox entries without internet."],
+        ["Flutter student app", "Shows timetable, personal attendance, scanner, and Institution portal links.", "Reads local timetable/history and stores signed proof outbox entries without internet."],
         ["Faculty Next.js portal", "Shows assigned classes, live roster, dynamic QR, manual attestation, records, and projector mode.", "Keeps cached session/roster state; an institution deployment should use a managed classroom host for long-duration offline signing."],
         ["FastAPI backend", "Verifies signatures, eligibility, device status at scan time, duplicates, records, and audit events.", "Authoritative once reachable; accepts eligible delayed evidence during the reconciliation window."],
     ])
@@ -187,7 +187,7 @@ def build() -> None:
     bullet(doc, "A release is blocked by failed migrations, signature/late-sync regressions, failed app analysis, failed frontend build, or container build failure.")
     heading(doc, "8. Deployment Requirements")
     paragraph(doc, "The repository is production-hardened at the code boundary, but institutional deployment still needs real identity infrastructure and operations. These are required controls, not optional polish.")
-    bullet(doc, "Replace development identity headers and the demonstration password with KIIT OIDC/Google Workspace sign-in, role claims, and server-side session tokens.")
+    bullet(doc, "Replace development identity headers and the demonstration password with Institution OIDC/Google Workspace sign-in, role claims, and server-side session tokens.")
     bullet(doc, "Store institution signing seeds and ICT approval credentials only in a managed secrets service. Production startup already fails when default signing material or a weak ICT key is used.")
     bullet(doc, "Move rate limiting and session coordination to Redis, run PostgreSQL backups with restore drills, and centralize audit logs and alerts.")
     bullet(doc, "Use Android Play Integrity and Apple App Attest before claiming strong device integrity. Cryptographic keys alone cannot attest that an uncompromised handset produced the proof.")

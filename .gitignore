@@ -9,6 +9,7 @@ __pycache__/
 .playwright-mcp/
 .next/
 .next-build*/
+.next-*/
 *.tsbuildinfo
 dist/
 build/
@@ -19,6 +20,11 @@ node_modules/
 *.pptx
 *.inspect.ndjson
 outputs/
+output/pdf/
+*.xlsx
+*.xls
+*.csv
+*credential*register*
 
 # Keep the public project README only.
 *.md
@@ -43,3 +49,11 @@ client/ios/Runner.xcodeproj/xcuserdata/
 faculty-portal/.next/
 faculty-portal/dist/
 faculty-portal/node_modules/
+
+# Editorial deployments copy only allowlisted public components and assets.
+deploy/editorial/src/components/marketing/
+deploy/editorial/public/
+deploy/editorial/src/lib/commercial/
+deploy/editorial/src/app/api/
+deploy/editorial/server-assets/
+.vercel/
