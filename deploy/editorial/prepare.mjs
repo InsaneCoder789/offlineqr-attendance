@@ -5,18 +5,17 @@ import path from "node:path";
 const target = path.dirname(fileURLToPath(import.meta.url));
 const source = path.resolve(target, "../../faculty-portal");
 const components = [
-  "ScrollEditorial.tsx", "ImageStory.tsx", "PricingSection.tsx",
-  "story-model.ts", "story.module.css", "image-story.module.css",
+  "ScrollEditorial.tsx", "ImageStory.tsx", "PricingSection.tsx", "ClassroomScene.tsx",
+  "PublicPage.tsx", "public-page.module.css", "story-model.ts", "story.module.css", "image-story.module.css",
 ];
 await mkdir(path.join(target, "src/components/marketing"), { recursive: true });
-await mkdir(path.join(target, "public/branding/story-locked-v2"), { recursive: true });
 for (const name of components) {
   await copyFile(path.join(source, "src/components/marketing", name), path.join(target, "src/components/marketing", name));
 }
-for (const name of ["classroom.png", "scan.png", "offline.png", "reconcile.png"]) {
-  await copyFile(path.join(source, "public/branding/story-locked-v2", name), path.join(target, "public/branding/story-locked-v2", name));
+await mkdir(path.join(target, "public/branding"), { recursive: true });
+for (const name of ["offlineqr-mark.svg", "classroom-hd.webp", "classroom-mobile.webp", "devices-hd.webp"]) {
+  await copyFile(path.join(source, "public/branding", name), path.join(target, "public/branding", name));
 }
-await copyFile(path.join(source, "public/branding/offlineqr-mark.svg"), path.join(target, "public/branding/offlineqr-mark.svg"));
 await mkdir(path.join(target, "src/lib/commercial"), { recursive: true });
 await mkdir(path.join(target, "src/app/api/proposals"), { recursive: true });
 await mkdir(path.join(target, "server-assets/commercial"), { recursive: true });
@@ -28,3 +27,11 @@ for (const name of ["Manrope-Regular.ttf", "Manrope-SemiBold.ttf", "Manrope-Bold
   await copyFile(path.join(source, "server-assets/commercial", name), path.join(target, "server-assets/commercial", name));
 }
 console.log("Prepared editorial and proposal PDF endpoint only; no workspace routes, customer records or secrets copied.");
+
+for (const name of ["public-pages.ts", "public-site.ts"]) {
+  await copyFile(path.join(source, "src/lib", name), path.join(target, "src/lib", name));
+}
+for (const name of ["not-found.tsx", "robots.ts", "sitemap.ts", "privacy/page.tsx", "terms/page.tsx", "contact/page.tsx", "accessibility/page.tsx"]) {
+  await mkdir(path.dirname(path.join(target, "src/app", name)), { recursive: true });
+  await copyFile(path.join(source, "src/app", name), path.join(target, "src/app", name));
+}

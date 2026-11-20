@@ -57,3 +57,13 @@ deploy/editorial/src/lib/commercial/
 deploy/editorial/src/app/api/
 deploy/editorial/server-assets/
 .vercel/
+
+# Public support pages copied from the primary web app by editorial prepare.
+/deploy/editorial/src/lib/public-*.ts
+/deploy/editorial/src/app/not-found.tsx
+/deploy/editorial/src/app/robots.ts
+/deploy/editorial/src/app/sitemap.ts
+/deploy/editorial/src/app/privacy/
+/deploy/editorial/src/app/terms/
+/deploy/editorial/src/app/contact/
+/deploy/editorial/src/app/accessibility/
