@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from backend.app.config import get_settings
 from backend.app.main import app
 from backend.app.redis_service import clear_development_state
+from backend.tests.support import setUpModule, tearDownModule  # noqa: F401
 
 
 DEMO_STUDENT_ID = UUID("50000000-0000-4000-8000-000000000866")

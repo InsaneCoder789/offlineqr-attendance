@@ -22,6 +22,7 @@ from backend.app.device_crypto import (
 )
 from backend.app.main import app
 from backend.app.redis_service import clear_development_state
+from backend.tests.support import setUpModule, tearDownModule  # noqa: F401
 
 DEV_STUDENT_ID = UUID("50000000-0000-4000-8000-000000000001")
 
@@ -58,10 +59,10 @@ class DeviceApiTest(unittest.TestCase):
     def _ict_headers(self) -> dict[str, str]:
         login = self.client.post(
             "/api/v1/faculty/auth/login",
-            json={"email": "ananya.sen@kiit.ac.in", "password": "ChangeMe-Dev-Only!2026"},
+            json={"email": "ananya.sen@example.edu", "password": "ChangeMe-Dev-Only!2026"},
         )
         self.assertEqual(login.status_code, 200, login.text)
-        return {"x-csrf-token": self.client.cookies.get("kiit_faculty_csrf")}
+        return {"x-csrf-token": self.client.cookies.get("offlineqr_faculty_csrf")}
 
     def test_enrollment_challenge_response_creates_active_device(self) -> None:
         device = self._enroll(seed_byte=1)

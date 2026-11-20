@@ -15,6 +15,7 @@ from backend.app.device_crypto import (
 )
 from backend.app.main import app
 from backend.app.redis_service import clear_development_state
+from backend.tests.support import setUpModule, tearDownModule  # noqa: F401
 
 
 DEV_STUDENT_ID = UUID("50000000-0000-4000-8000-000000000001")
@@ -32,7 +33,7 @@ class AdminDeviceApiTest(unittest.TestCase):
     def _sign_in_as_ict_admin(self) -> None:
         response = self.client.post(
             "/api/v1/faculty/auth/login",
-            json={"email": "ananya.sen@kiit.ac.in", "password": "ChangeMe-Dev-Only!2026"},
+            json={"email": "ananya.sen@example.edu", "password": "ChangeMe-Dev-Only!2026"},
         )
         self.assertEqual(response.status_code, 200, response.text)
 
@@ -71,7 +72,7 @@ class AdminDeviceApiTest(unittest.TestCase):
     def test_admin_inventory_rejects_non_ict_faculty(self) -> None:
         login = self.client.post(
             "/api/v1/faculty/auth/login",
-            json={"email": "vikram.rao@kiit.ac.in", "password": "ChangeMe-Dev-Only!2026"},
+            json={"email": "vikram.rao@example.edu", "password": "ChangeMe-Dev-Only!2026"},
         )
         self.assertEqual(login.status_code, 200, login.text)
         response = self.client.get("/api/v1/admin/devices")

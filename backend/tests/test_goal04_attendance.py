@@ -16,6 +16,7 @@ from backend.app.attendance_protocol import (
 from backend.app.attendance_service import qr_payload_for, start_attendance_session
 from backend.app.config import get_settings
 from backend.app.main import app
+from backend.tests.support import setUpModule, tearDownModule  # noqa: F401
 
 DEV_FACULTY_ID = UUID("40000000-0000-4000-8000-000000000001")
 
@@ -180,6 +181,54 @@ class Goal04AttendanceApiTest(unittest.TestCase):
 
         self.assertEqual(anonymous.status_code, 401)
         self.assertEqual(anonymous.json()["error"]["code"], "FACULTY_AUTH_REQUIRED")
+
+    def test_course_with_several_slots_prepares_and_starts_each_slot(self) -> None:
+        from datetime import time
+        from uuid import uuid4
+
+        from backend.app.institution_clock import institution_local_to_utc, institution_today
+
+        offering_id = self._today_offering_id()
+        today = institution_today()
+        slot_id = uuid4()
+        with psycopg.connect(get_settings().database_url) as conn:
+            conn.execute(
+                """
+                INSERT INTO timetable_entries (id, course_offering_id, day_of_week, start_time, end_time, room, valid_from, valid_until)
+                SELECT %s, course_offering_id, day_of_week, '23:10', '23:50', 'X-1', valid_from, valid_until
+                FROM timetable_entries WHERE course_offering_id = %s AND day_of_week = %s LIMIT 1
+                """,
+                [slot_id, offering_id, today.isoweekday()],
+            )
+        try:
+            prepared = self.client.post("/api/v1/faculty/attendance-sessions/offline-package")
+            self.assertEqual(prepared.status_code, 200, prepared.text)
+            mine = [item for item in prepared.json() if item["course_offering_id"] == offering_id]
+            self.assertEqual(len(mine), 2)
+            self.assertEqual(len({item["id"] for item in mine}), 2)
+
+            started = self.client.post(
+                "/api/v1/faculty/attendance-sessions/start",
+                json={"course_offering_id": offering_id, "timetable_entry_id": str(slot_id)},
+            )
+            self.assertEqual(started.status_code, 200, started.text)
+            self.assertIn(started.json()["id"], {item["id"] for item in mine})
+            with psycopg.connect(get_settings().database_url) as conn:
+                start = conn.execute(
+                    "SELECT scheduled_start FROM attendance_sessions WHERE id = %s",
+                    [started.json()["id"]],
+                ).fetchone()[0]
+            self.assertEqual(start, institution_local_to_utc(today, time(23, 10)))
+
+            missing = self.client.post(
+                "/api/v1/faculty/attendance-sessions/start",
+                json={"course_offering_id": offering_id, "timetable_entry_id": str(uuid4())},
+            )
+            self.assertEqual(missing.status_code, 404)
+            self.assertEqual(missing.json()["error"]["code"], "TIMETABLE_ENTRY_NOT_FOUND")
+        finally:
+            with psycopg.connect(get_settings().database_url) as conn:
+                conn.execute("DELETE FROM timetable_entries WHERE id = %s", [slot_id])
 
     def _today_offering_id(self) -> str:
         response = self.client.get("/api/v1/faculty/classes/today")

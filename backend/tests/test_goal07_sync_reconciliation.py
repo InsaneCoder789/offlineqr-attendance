@@ -11,6 +11,7 @@ from nacl.signing import SigningKey
 from backend.app.attendance_protocol import canonical_attendance_claim
 from backend.app.attendance_service import qr_payload_for, start_attendance_session
 from backend.app.config import get_settings
+from backend.app.domain import attendance_percentage
 from backend.app.device_crypto import b64url_encode, public_key_fingerprint
 from backend.app.main import app
 from backend.app.presence_protocol import (
@@ -18,6 +19,7 @@ from backend.app.presence_protocol import (
     canonical_attendance_proof,
     canonical_presence_response,
 )
+from backend.tests.support import setUpModule, tearDownModule  # noqa: F401
 
 DEV_STUDENT_ID = UUID("50000000-0000-4000-8000-000000000001")
 class Goal07SyncReconciliationTest(unittest.TestCase):
@@ -144,6 +146,110 @@ class Goal07SyncReconciliationTest(unittest.TestCase):
         self.assertEqual(activated.status_code, 200, activated.text)
         self.assertEqual(activated.json()["id"], prepared["id"])
         self.assertEqual(activated.json()["state"], "ACTIVE")
+
+    def test_second_claim_for_same_session_student_is_claim_conflict_without_failing_batch(self) -> None:
+        first = self._submission()
+        # A different claim_id (fresh claim/challenge/response/proof) for the same session + student.
+        second = self._submission()
+        other = self._submission()
+        self.assertNotEqual(first["claim"]["claim_id"], second["claim"]["claim_id"])
+        # A proof from another (still valid) student identity-free claim: reject by protocol, must not poison batch.
+        bad = {**other, "protocol_version": "ATTENDANCE_PROOF_V0"}
+
+        response = self.client.post(
+            "/api/v1/attendance/proofs/batch",
+            json={"proofs": [first, second, bad]},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        results = response.json()["results"]
+        self.assertEqual(results[0]["result"], "ACCEPTED")
+        self.assertEqual(results[1]["result"], "REJECTED")
+        self.assertEqual(results[1]["error_code"], "CLAIM_CONFLICT")
+        self.assertEqual(results[2]["result"], "REJECTED")
+        self.assertEqual(results[2]["error_code"], "UNSUPPORTED_PROTOCOL")
+        with psycopg.connect(get_settings().database_url) as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM attendance_records WHERE attendance_session_id = %s AND student_id = %s",
+                [first["proof"]["session_id"], DEV_STUDENT_ID],
+            ).fetchone()[0]
+        self.assertEqual(count, 1)
+
+    def test_faculty_attestation_does_not_overwrite_secure_proof_method(self) -> None:
+        submission = self._submission()
+        session_id = submission["proof"]["session_id"]
+        self.assertEqual(
+            self.client.post("/api/v1/attendance/proofs", json=submission).json()["attendance_method"],
+            "SECURE_PROOF",
+        )
+
+        attest = self.client.post(
+            f"/api/v1/faculty/attendance-sessions/{session_id}/attest",
+            headers={"x-faculty-id": str(self._student_today_faculty_and_offering()[0])},
+            json={"student_id": str(DEV_STUDENT_ID), "reason": "Student device failure"},
+        )
+
+        self.assertEqual(attest.status_code, 200, attest.text)
+        with psycopg.connect(get_settings().database_url) as conn:
+            row = conn.execute(
+                """
+                SELECT status::text, method::text FROM attendance_records
+                WHERE attendance_session_id = %s AND student_id = %s
+                """,
+                [session_id, DEV_STUDENT_ID],
+            ).fetchone()
+        self.assertEqual(row, ("PRESENT", "SECURE_PROOF"))
+
+    def test_finalize_marks_unproven_rostered_student_absent_and_updates_percentage(self) -> None:
+        faculty_id, offering_id = self._student_today_faculty_and_offering()
+        session = start_attendance_session(faculty_id, offering_id)
+        before = self._course_summary(offering_id)
+        headers = {"x-faculty-id": str(faculty_id)}
+
+        closed = self.client.post(
+            f"/api/v1/faculty/attendance-sessions/{session['id']}/close", headers=headers
+        )
+        self.assertEqual(closed.status_code, 200, closed.text)
+        with psycopg.connect(get_settings().database_url) as conn:
+            conn.execute(
+                "UPDATE attendance_sessions SET reconcile_until = now() - interval '1 minute' WHERE id = %s",
+                [session["id"]],
+            )
+        finalized = self.client.post(
+            f"/api/v1/faculty/attendance-sessions/{session['id']}/reconcile", headers=headers
+        )
+        self.assertEqual(finalized.status_code, 200, finalized.text)
+        self.assertEqual(finalized.json()["state"], "RECONCILED")
+
+        with psycopg.connect(get_settings().database_url) as conn:
+            row = conn.execute(
+                """
+                SELECT status::text, method FROM attendance_records
+                WHERE attendance_session_id = %s AND student_id = %s
+                """,
+                [session["id"], DEV_STUDENT_ID],
+            ).fetchone()
+        self.assertEqual(row, ("ABSENT", None))
+        after = self._course_summary(offering_id)
+        self.assertEqual(after["absent"], before["absent"] + 1)
+        self.assertEqual(after["present"], before["present"])
+        self.assertEqual(after["percentage"], attendance_percentage(after["present"], after["absent"]))
+        bootstrap = self.client.get("/api/v1/sync/bootstrap").json()
+        boot_summary = next(
+            item for item in bootstrap["attendance_summaries"] if item["course_id"] == after["course_id"]
+        )
+        self.assertEqual(boot_summary["percentage"], after["percentage"])
+
+    def _course_summary(self, offering_id: UUID) -> dict:
+        with psycopg.connect(get_settings().database_url) as conn:
+            course_id = conn.execute(
+                "SELECT course_id FROM course_offerings WHERE id = %s", [offering_id]
+            ).fetchone()[0]
+        summaries = self.client.get("/api/v1/me/attendance/summary").json()
+        found = [item for item in summaries if item["course_id"] == str(course_id)]
+        if found:
+            return found[0]
+        return {"course_id": str(course_id), "present": 0, "absent": 0, "percentage": 0.0}
 
     def _submission(self) -> dict:
         faculty_id, offering_id = self._student_today_faculty_and_offering()

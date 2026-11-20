@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from backend.app.main import app
 from backend.app.schemas import BootstrapSyncOut
+from backend.tests.support import setUpModule, tearDownModule  # noqa: F401
 
 
 class BootstrapApiTest(unittest.TestCase):
@@ -33,10 +34,10 @@ class BootstrapApiTest(unittest.TestCase):
         }
         self.assertEqual(exposed_rolls, {"DEV24155001"})
 
-    def test_dev_login_resolves_kiit_email_to_student_projection(self) -> None:
+    def test_dev_login_resolves_institution_email_to_student_projection(self) -> None:
         response = self.client.post(
             "/api/v1/auth/dev-login",
-            json={"email": "dev24155001@kiit.ac.in"},
+            json={"email": "dev24155001@example.edu"},
         )
 
         self.assertEqual(response.status_code, 200, response.text)
