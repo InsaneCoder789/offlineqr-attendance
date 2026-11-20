@@ -98,7 +98,41 @@ def student_timetable(student_id: UUID, today: date | None = None) -> list[dict]
         return [dict(row) for row in rows]
 
 
-def prepare_attendance_session(faculty_id: UUID, course_offering_id: UUID) -> dict:
+def _select_slot(conn, course_offering_id: UUID, current: date, now: datetime,
+                 timetable_entry_id: UUID | None = None) -> dict:
+    """Pick today's timetable slot: explicit id, else the one containing now, else next upcoming, else last."""
+    slots = conn.execute(
+        """
+        SELECT id, start_time, end_time, room
+        FROM timetable_entries
+        WHERE course_offering_id = %s AND day_of_week = %s
+          AND valid_from <= %s AND valid_until >= %s AND active = true
+        ORDER BY start_time, id
+        """,
+        [course_offering_id, current.isoweekday(), current, current],
+    ).fetchall()
+    if timetable_entry_id is not None:
+        for slot in slots:
+            if str(slot["id"]) == str(timetable_entry_id):
+                return slot
+        raise ApiError("TIMETABLE_ENTRY_NOT_FOUND", "That class slot is not scheduled today.", 404)
+    if not slots:
+        raise ApiError("TIMETABLE_ENTRY_NOT_FOUND", "No class is scheduled today.", 404)
+    windows = [
+        (institution_local_to_utc(current, s["start_time"]), institution_local_to_utc(current, s["end_time"]), s)
+        for s in slots
+    ]
+    for start, end, slot in windows:
+        if start <= now < end:
+            return slot
+    for start, _end, slot in windows:
+        if start > now:
+            return slot
+    return windows[-1][2]
+
+
+def prepare_attendance_session(faculty_id: UUID, course_offering_id: UUID,
+                               timetable_entry_id: UUID | None = None) -> dict:
     """Pre-authorize a scheduled class so its QR can be hosted without internet."""
     now = datetime.now(UTC)
     current = institution_today(now)
@@ -106,19 +140,7 @@ def prepare_attendance_session(faculty_id: UUID, course_offering_id: UUID) -> di
     with _connect() as conn:
         with conn.transaction():
             _require_faculty_offering(conn, faculty_id, course_offering_id)
-            entry = conn.execute(
-                """
-                SELECT start_time, end_time, room
-                FROM timetable_entries
-                WHERE course_offering_id = %s AND day_of_week = %s
-                  AND valid_from <= %s AND valid_until >= %s AND active = true
-                ORDER BY start_time
-                LIMIT 1
-                """,
-                [course_offering_id, day, current, current],
-            ).fetchone()
-            if entry is None:
-                raise ApiError("TIMETABLE_ENTRY_NOT_FOUND", "No class is scheduled today.", 404)
+            entry = _select_slot(conn, course_offering_id, current, now, timetable_entry_id)
 
             scheduled_start = institution_local_to_utc(current, entry["start_time"])
             scheduled_end = institution_local_to_utc(current, entry["end_time"])
@@ -167,14 +189,29 @@ def prepare_attendance_session(faculty_id: UUID, course_offering_id: UUID) -> di
 
 def prepare_today_attendance_sessions(faculty_id: UUID) -> list[dict]:
     prepared = []
-    for item in today_faculty_classes(faculty_id):
-        prepared.append(
-            prepare_attendance_session(faculty_id, item["course_offering_id"])
-        )
+    current = institution_today()
+    offerings = list(dict.fromkeys(item["course_offering_id"] for item in today_faculty_classes(faculty_id)))
+    for offering_id in offerings:
+        with _connect() as conn:
+            slot_ids = [
+                row["id"]
+                for row in conn.execute(
+                    """
+                    SELECT id FROM timetable_entries
+                    WHERE course_offering_id = %s AND day_of_week = %s
+                      AND valid_from <= %s AND valid_until >= %s AND active = true
+                    ORDER BY start_time, id
+                    """,
+                    [offering_id, current.isoweekday(), current, current],
+                ).fetchall()
+            ]
+        for slot_id in slot_ids:
+            prepared.append(prepare_attendance_session(faculty_id, offering_id, slot_id))
     return prepared
 
 
-def start_attendance_session(faculty_id: UUID, course_offering_id: UUID) -> dict:
+def start_attendance_session(faculty_id: UUID, course_offering_id: UUID,
+                             timetable_entry_id: UUID | None = None) -> dict:
     now = datetime.now(UTC)
     current = institution_today(now)
     day = current.isoweekday()
@@ -190,19 +227,7 @@ def start_attendance_session(faculty_id: UUID, course_offering_id: UUID) -> dict
             if assignment is None:
                 raise ApiError("FACULTY_NOT_AUTHORIZED", "Faculty cannot start this class.", 403)
 
-            entry = conn.execute(
-                """
-                SELECT start_time, end_time, room
-                FROM timetable_entries
-                WHERE course_offering_id = %s AND day_of_week = %s
-                  AND valid_from <= %s AND valid_until >= %s AND active = true
-                ORDER BY start_time
-                LIMIT 1
-                """,
-                [course_offering_id, day, current, current],
-            ).fetchone()
-            if entry is None:
-                raise ApiError("TIMETABLE_ENTRY_NOT_FOUND", "No class is scheduled today.", 404)
+            entry = _select_slot(conn, course_offering_id, current, now, timetable_entry_id)
 
             scheduled_start = institution_local_to_utc(current, entry["start_time"])
             scheduled_end = institution_local_to_utc(current, entry["end_time"])

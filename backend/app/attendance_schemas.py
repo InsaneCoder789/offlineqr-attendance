@@ -98,6 +98,7 @@ class FacultySessionOut(BaseModel):
 
 class StartSessionIn(BaseModel):
     course_offering_id: UUID
+    timetable_entry_id: UUID | None = None
 
 
 class RosterStudentOut(BaseModel):

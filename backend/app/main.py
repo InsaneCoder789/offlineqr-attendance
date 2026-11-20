@@ -100,7 +100,15 @@ from .admin_service import (
     admin_pending_replacements,
 )
 from .errors import ApiError, api_error_handler
-from .repositories import bootstrap_student_sync, get_faculty_by_identity, get_student, get_student_by_email
+from .repositories import (
+    bootstrap_student_sync,
+    get_faculty_by_identity,
+    get_student,
+    get_student_by_email,
+    student_attendance_records,
+    student_attendance_summaries,
+    student_enrollments,
+)
 from .redis_service import assert_available, faculty_session, publish_session_event, revoke_faculty_session, session_event_version, student_session
 from .redis_service import create_faculty_session, create_student_session
 from .oidc_service import verify_oidc_identity
@@ -373,17 +381,17 @@ def sync_bootstrap(request: Request) -> dict:
 
 @app.get("/api/v1/me/enrollments", response_model=list[EnrollmentOut])
 def my_enrollments(request: Request) -> list[dict]:
-    return bootstrap_student_sync(_student_id_from_request(request))["enrollments"]
+    return student_enrollments(_student_id_from_request(request))
 
 
 @app.get("/api/v1/me/attendance", response_model=list[AttendanceRecordOut])
 def my_attendance(request: Request) -> list[dict]:
-    return bootstrap_student_sync(_student_id_from_request(request))["attendance_records"]
+    return student_attendance_records(_student_id_from_request(request))
 
 
 @app.get("/api/v1/me/attendance/summary", response_model=list[AttendanceSummaryOut])
 def my_attendance_summary(request: Request) -> list[dict]:
-    return bootstrap_student_sync(_student_id_from_request(request))["attendance_summaries"]
+    return student_attendance_summaries(_student_id_from_request(request))
 
 
 @app.get("/api/v1/trust-roots/current", response_model=TrustRootOut)
@@ -418,7 +426,9 @@ def faculty_course_register(course_offering_id: UUID, request: Request) -> dict:
 
 @app.post("/api/v1/faculty/attendance-sessions/start", response_model=FacultySessionOut)
 def faculty_start_session(payload: StartSessionIn, request: Request) -> dict:
-    session = start_attendance_session(_faculty_id_from_request(request), payload.course_offering_id)
+    session = start_attendance_session(
+        _faculty_id_from_request(request), payload.course_offering_id, payload.timetable_entry_id
+    )
     _notify_session_change(session["id"], "SESSION_STARTED")
     return session
 
